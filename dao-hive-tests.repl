@@ -1,0 +1,812 @@
+;;////////////////////
+;;COIN ACCOUNT STUFF
+;;////////////////////
+
+;; Enable the table gas model and load the coin contract + create coin contract tables
+(env-gasmodel "table")
+(env-exec-config ['DisableInlineMemCheck])
+(env-gaslimit 500000)
+(begin-tx)
+(env-gas 0) (env-gaslog)
+(load "fungible-v2.pact")
+(load "fungible-xchain-v1.pact")
+(load "coin.pact")
+(create-table coin.coin-table)
+(create-table coin.allocation-table)
+(env-gaslog)
+(commit-tx)
+
+;;///////////////////////////////////
+;Create test keys + Load STEAK token
+;///////////////////////////////////
+
+(begin-tx)
+(env-data { 'ns: 'test })
+(env-data { "k:emily" : ["emily"], "admin-kadena-stake": ["keys2"], "k:stuart": ["stuart"], "k:doug": ["doug"], "k:kitty": ["kitty"], "prev-block-hash": "lPqiP54vy_E3rAkvgQVme2FreVXpVhOV3dIJYENZ2Zk" })
+(env-keys ["emily", "keys2", "stuart", "doug", "kitty"])
+(define-namespace 'test (read-keyset "k:emily") (read-keyset "k:emily"))
+(namespace 'test)
+(commit-tx)
+(begin-tx)
+(env-data { 'ns: 'test })
+(load "stake.pact")
+(create-table token-table)
+(env-data { "k:emily" : ["emily"], "admin-kadena-stake": ["keys2"], "k:stuart": ["stuart"], "k:doug": ["doug"], "k:kitty": ["kitty"], "prev-block-hash": "lPqiP54vy_E3rAkvgQVme2FreVXpVhOV3dIJYENZ2Zk" })
+(env-keys ["emily", "keys2", "stuart", "doug", "kitty"])
+(namespace 'test)
+
+(define-keyset "test.emily" (read-keyset "k:emily"))
+(define-keyset "test.doug" (read-keyset "k:doug"))
+(define-keyset "test.admin-kadena-stake" (read-keyset "admin-kadena-stake"))
+(define-keyset "test.stuart" (read-keyset "k:stuart"))
+(define-keyset "test.kitty" (read-keyset "k:kitty"))
+(test.stake-token.initialize)
+(test.stake-token.move-premine "k:emily"(read-keyset "k:emily") 10000.0  )
+(test.stake-token.get-balance "k:emily")
+(commit-tx)
+
+;///////////////////////////////
+;Credit test STEAK token
+;////////////////////////////////
+(begin-tx)
+(test-capability (test.stake-token.TRANSFER "k:emily" "k:kitty" 1000.0))
+(test.stake-token.transfer-create "k:emily" "k:kitty" (read-keyset "k:kitty") 1000.0)
+
+(test-capability (test.stake-token.TRANSFER "k:emily" "k:doug" 1000.0))
+(test.stake-token.transfer-create "k:emily" "k:doug" (read-keyset "k:doug") 1000.0)
+
+(test-capability (test.stake-token.TRANSFER "k:emily" "k:stuart" 1000.0))
+(test.stake-token.transfer-create "k:emily" "k:stuart" (read-keyset "k:stuart") 1000.0)
+(commit-tx)
+
+
+;/////////////////////////////
+;Create test coin accounts
+;//////////////////////////////
+
+(begin-tx)
+(env-gas 0) (env-gaslog)
+(use coin)
+(env-gaslog)
+(expect
+  "Gas cost of using the coin contract"
+  2 (env-gas))
+(env-gas 0) (env-gaslog)
+(create-account "k:emily" (read-keyset "k:emily"))
+(create-account 'admin-kadena-stake (read-keyset 'admin-kadena-stake))
+(create-account "k:stuart" (read-keyset "k:stuart"))
+(create-account "k:doug" (read-keyset "k:doug"))
+(create-account "k:kitty" (read-keyset "k:kitty"))
+(commit-tx)
+
+;///////////////////////////////
+;Credit test accounts test KDA
+;////////////////////////////////
+(begin-tx)
+(use coin)
+(env-gas 0) (env-gaslog)
+(test-capability (DEBIT "k:emily"))
+(env-gaslog)
+(expect
+  "Gas cost of testing the DEBIT capability"
+  26 (env-gas))
+
+;; credit tests
+(test-capability (CREDIT "k:emily"))
+(credit "k:emily" (read-keyset "k:emily") 1000.0)
+
+(test-capability (CREDIT "k:kitty"))
+(credit "k:kitty" (read-keyset "k:kitty") 1000.0)
+
+(test-capability (CREDIT "k:doug"))
+(credit "k:doug" (read-keyset "k:doug") 1000.0)
+(expect
+  "account balance reflects credit"
+  1000.0
+  (get-balance "k:emily"))
+
+(test-capability (CREDIT "admin-kadena-stake"))
+(credit 'admin-kadena-stake (read-keyset 'admin-kadena-stake) 1000.0)
+(expect
+  "account balance reflects credit"
+  1000.0
+  (get-balance 'admin-kadena-stake))
+
+(test-capability (CREDIT "k:stuart"))
+(credit "k:stuart" (read-keyset "k:stuart") 1000.0)
+(expect
+  "account balance reflects credit"
+  1000.0
+  (get-balance "k:stuart"))
+(commit-tx)
+
+
+
+;////////////////////
+;STEAK FACTORY SWAP TESTING
+;////////////////////
+;LOAD EXCHANGE
+
+(begin-tx)
+;(env-data { "k:emily" : ["emily"], "admin-kadena-stake": ["keys2"], "k:stuart": ["stuart"], "k:doug": ["doug"], "k:kitty": ["kitty"], "prev-block-hash": "lPqiP54vy_E3rAkvgQVme2FreVXpVhOV3dIJYENZ2Zk" })
+;(env-keys ["emily", "keys2", "stuart", "doug", "kitty"])
+(env-data
+ { 'ns-admin-keyset: ["admin"]
+ , 'ns-operate-keyset: ["operate"]
+ , 'ns-genesis-keyset: { "keys": [], "pred": "="}
+ , "k:emily" : ["emily"], "admin-kadena-stake": ["keys2"], "k:stuart": ["stuart"], "k:doug": ["doug"], "k:kitty": ["kitty"]})
+;(load "root/fungible-v2.pact")
+;(load "root/coin.pact")
+(load "ns.pact")
+
+(env-data
+  { 'swap-ns-user: ["swap-user"]
+  , 'swap-ns-admin: ["swap-admin"]
+  , "admin-kadena-stake": ["keys2"]
+  , 'ns: "swap"
+  , "k:emily" : ["emily"], "admin-kadena-stake": ["keys2"], "k:stuart": ["stuart"], "k:doug": ["doug"], "k:kitty": ["kitty"]
+  , 'upgrade: false
+  })
+(env-keys ["operate", "swap-user", "swap-admin", "stuart", "keys2"])
+(define-keyset "test.admin-kadena-stake" (read-keyset "admin-kadena-stake"))
+
+(load "fungible-util.pact")
+(load "tokens.pact")
+(load "swap-callable.pact")
+;(load "exchangeBROKE.pact")
+(load "exchange.pact")
+
+; ;Test create pair
+; (test-capability (test.stake-token.TRANSFER "k:stuart" "STAKEFACTORYTREASURY" 0.01))
+; (expect
+;   "create pair succeeds without governance"
+;   {"key": "coin:test.stake-token:test-pool","account": "WZ4-Mu0yxHczn1Qjhp1HJC_6XvXzeq7UxSWHYrINqVs"}
+;   (create-pair coin test.stake-token "" 0.05 "test-pool" "k:stuart")
+; )
+;
+; ;Test add liquidity
+; (test-capability  (coin.TRANSFER "k:stuart" "WZ4-Mu0yxHczn1Qjhp1HJC_6XvXzeq7UxSWHYrINqVs" 10.000000000000))
+; (test-capability  (test.stake-token.TRANSFER "k:stuart" "WZ4-Mu0yxHczn1Qjhp1HJC_6XvXzeq7UxSWHYrINqVs" 40.000000000000))
+; (expect "add-liquidity"
+;   { "liquidity": 19.9
+;   , "supply": 20.0
+;   , "amount0": 10.0
+;   , "amount1": 40.0 }
+;   (addliquidity
+;     "test-pool"
+;     coin
+;     test.stake-token
+;     10.0
+;     40.0
+;     10.0
+;     40.0
+;     "k:stuart"
+;     "k:stuart"
+;     (read-keyset "k:stuart")
+;     ))
+
+(create-pair coin test.stake-token "k:stuart")
+
+(test-capability (coin.TRANSFER "k:stuart" "OSiP824FJx-naS_jUcDoggZ_5vHLPqAzotFR1yjYxgc" 10.000000000000))
+(test-capability (test.stake-token.TRANSFER "k:stuart" "OSiP824FJx-naS_jUcDoggZ_5vHLPqAzotFR1yjYxgc" 40.000000000000))
+(add-liquidity
+    coin
+    test.stake-token
+    10.0
+    40.0
+    10.0
+    40.0
+    "k:stuart"
+    "k:stuart"
+    (read-keyset "k:stuart")
+    )
+
+(commit-tx)
+;A liquidity pool named 'test-pool' is created to test swap KDA <-> test.stake-token
+
+;Non stake-factory swap format:
+; (expect "swap exact in"
+;   [ { "token": "coin", "amount": 8.0 }
+;     { "token": "swap.abc", "amount": 6.30082157151885 }
+;   ]
+;   (swap-exact-in 8.0 6.3 [coin swap.abc]
+;     "Alice" "Alice" (read-keyset 'alice) ))
+
+;Test swap
+(begin-tx)
+;(test-capability  (coin.TRANSFER "k:stuart" "WZ4-Mu0yxHczn1Qjhp1HJC_6XvXzeq7UxSWHYrINqVs" 8.0))
+; (expect "swap exact in"
+;   [{"token": "coin","amount": 8.0} {"token": "test.stake-token","amount": 17.708676307009,"fee": 0.044382647384,"before-fee-amount-out": 17.753058954393}]
+;   (swap.exchange.swapexactin [{"poolName":"test-pool"}{"poolName":"test-pool"}] 8.0 6.0 [coin test.stake-token]
+;     "k:stuart" "k:stuart" (read-keyset "k:stuart") ))
+
+(test-capability (coin.TRANSFER "k:stuart" "OSiP824FJx-naS_jUcDoggZ_5vHLPqAzotFR1yjYxgc" 8.0))
+(swap.exchange.swap-exact-in 8.0 6.0 [coin test.stake-token]
+    "k:stuart" "k:stuart" (read-keyset "k:stuart") )
+(commit-tx)
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;ANEDAK
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(begin-tx)
+;(define-namespace 'test (sig-keyset) (sig-keyset))
+(env-data { "k:emily" : ["emily"], "admin-kadena-stake": ["keys2"], "k:stuart": ["stuart"], "k:doug": ["doug"], "k:kitty": ["kitty"], "prev-block-hash": "lPqiP54vy_E3rAkvgQVme2FreVXpVhOV3dIJYENZ2Zk" })
+(env-keys ["emily", "keys2", "stuart", "doug", "kitty"])
+(env-data { 'ns: 'test })
+(load "anedak.pact")
+(create-table token-table)
+
+
+;DEFINE ACCOUNTS AGAIN
+(env-data { "k:emily" : ["emily"], "admin-kadena-stake": ["keys2"], "k:stuart": ["stuart"], "k:doug": ["doug"], "k:kitty": ["kitty"], "prev-block-hash": "lPqiP54vy_E3rAkvgQVme2FreVXpVhOV3dIJYENZ2Zk" })
+(env-keys ["emily", "keys2", "stuart", "doug", "kitty"])
+(define-keyset "test.emily" (read-keyset "k:emily"))
+(define-keyset "test.doug" (read-keyset "k:doug"))
+(define-keyset "test.admin-kadena-stake" (read-keyset "admin-kadena-stake"))
+(define-keyset "test.stuart" (read-keyset "k:stuart"))
+(define-keyset "test.kitty" (read-keyset "k:kitty"))
+
+(describe-keyset "test.emily")
+
+(test.anedak.check-reserved "k:emily")
+(test.anedak.enforce-reserved2 "k:emily" (read-keyset "k:emily"))
+
+(test.anedak.initialize)
+(test.anedak.move-premine "k:emily"(read-keyset "k:emily") 1000.0  )
+(test.anedak.get-balance "k:emily")
+
+(commit-tx)
+
+(begin-tx)
+(use test.anedak)
+(test-capability (test.anedak.TRANSFER "k:emily" "k:kitty" 100.0))
+(test.anedak.transfer-create "k:emily" "k:kitty" (read-keyset "k:kitty") 100.0)
+
+(test-capability (test.anedak.TRANSFER "k:emily" "k:doug" 100.0))
+(test.anedak.transfer-create "k:emily" "k:doug" (read-keyset "k:doug") 100.0)
+
+;(test-capability (test.anedak.TRANSFER "k:emily" "k:stuart" 100.0))
+;(test.anedak.transfer-create "k:emily" "k:stuart" (read-keyset "k:stuart") 100.0)
+(commit-tx)
+;We transfer 100 ADK to stakers for testing
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;////////////////////////////
+;;kadena-stake TESTS
+;;;;;;;;;;;;;;;;;;;;;;;;;;//////////////////////////
+
+
+;Load Contract + Create Tables
+(begin-tx)
+;(define-namespace 'test (sig-keyset) (sig-keyset))
+(env-data { 'ns: 'test })
+(env-gas 0) (env-gaslog)
+(load "dao-hive-factory.pact")
+(env-gaslog)
+(create-table test.dao-hive-factory.daos-table)
+(create-table test.dao-hive-factory.dao-membership-ids-table)
+(create-table test.dao-hive-factory.dao-messages-table)
+(create-table test.dao-hive-factory.dao-updates-table)
+(create-table test.dao-hive-factory.dao-accounts-table)
+(create-table test.dao-hive-factory.dao-pools-table)
+(create-table test.dao-hive-factory.dao-proposals-table)
+(create-table test.dao-hive-factory.dao-votes-table)
+(create-table test.dao-hive-factory.user-vote-records)
+(create-table test.dao-hive-factory.user-proposition-records)
+(commit-tx)
+
+
+
+;/////////////////////////////////////////////////////////////////////////////////
+;// DAO TEST 1
+;// Test creating a DAO | Test adding members to DAO | Testing locking a DAO
+;;////////////////////////////////////////////////////////////////////////////////
+
+
+;Test create-dao
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:00Z") })
+(test.dao-hive-factory.create-dao
+  "test dao"
+  "k:stuart"
+  "https:link"
+  "test daos long description"
+  86400.0
+  0.50
+  [{"id":"k:stuart"}]
+  false
+  )
+(commit-tx)
+;correct our dao is created
+
+;Test get-daos
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:01Z") })
+(test.dao-hive-factory.get-daos)
+(test.dao-hive-factory.get-all-daos)
+(commit-tx)
+
+;Test get-daos
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:01Z") })
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(commit-tx)
+;Correct
+
+;Test get-dao-members
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:01Z") })
+(test.dao-hive-factory.get-dao-members "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(commit-tx)
+
+;Test create-dao-member
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:01Z") })
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.create-dao-member "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "k:kitty")
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.get-dao-members "VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(commit-tx)
+;Correct
+
+;Test add-account - expect failure
+;(begin-tx)
+;(test.dao-hive-factory.add-account "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "k:kitty")
+;(commit-tx)
+;correct - fails due to capability not added this function must be accessed from somewhere else
+
+;Test lock-dao
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:01Z") })
+(test.dao-hive-factory.get-dao-members "VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.lock-dao "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(commit-tx)
+;Correct the dao locks and new members cannot be added
+
+;Test create-dao-member again after the pool is locked
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:02Z") })
+(expect-failure
+  "Cannot add members to a locked Hive"
+  "Cannot add members to a locked Hive"
+  (test.dao-hive-factory.create-dao-member "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "k:kitty"))
+(commit-tx)
+;Correct - cannot add accounts to a locked pool
+
+;Test create-dao-message
+(begin-tx)
+(env-gas 0) (env-gaslog)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:03Z") })
+(test.dao-hive-factory.create-dao-message "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "my new message" "my message is not very long")
+(env-gaslog)
+(commit-tx)
+;Correct
+
+;Test get-dao-messages
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:04Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-messages "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gaslog)
+(commit-tx)
+;Correct
+
+;SANITY CHECK POOL INFO
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:05Z") })
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(commit-tx)
+;CORRECT
+
+;Test create-dao-treasury-pool
+(begin-tx)
+(env-gas 0) (env-gaslog)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:06Z") })
+(test.dao-hive-factory.create-dao-treasury-pool "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" coin "KDA pool" "test kda pool")
+(env-gaslog)
+(test.dao-hive-factory.get-dao-pools "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(commit-tx)
+;Correct
+
+;Test create-dao-treasury-pool
+(begin-tx)
+(env-gas 0) (env-gaslog)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:06Z") })
+(test.dao-hive-factory.create-dao-treasury-pool "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" test.stake-token "STEAK pool" "test STEAK pool")
+(env-gaslog)
+(commit-tx)
+;Correct
+
+;Test get-dao-pools
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:07Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-pools "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gaslog)
+(commit-tx)
+;Correct
+
+;Test deposit-subject-treasury
+(begin-tx)
+(coin.get-balance "k:stuart")
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:08Z") })
+(test-capability (coin.TRANSFER "k:stuart" "H0vCQlLSe2TfSPo5HRbVuYCrQ1dEsO4czzrAKD8l3r8" 2.0))
+(test.dao-hive-factory.deposit-dao-treasury "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "1:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" coin 2.0 "to donate to cats")
+(coin.get-balance "k:stuart")
+(coin.get-balance "H0vCQlLSe2TfSPo5HRbVuYCrQ1dEsO4czzrAKD8l3r8")
+(commit-tx)
+;Correct stuart deposits 2 coin into the hives pool
+
+;Test get-dao-updates
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:09Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-updates "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gaslog)
+(commit-tx)
+;Correct
+
+;Test get-create-dao-proposal
+;Test "WITHDRAW"" action
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:10Z") })
+(env-gas 0) (env-gaslog)
+;(test.anedak.create-account "k:stuart" (at "guard" (coin.details "k:stuart")))
+(test.dao-hive-factory.create-dao-proposal "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1000.0 "first proposal" "first proposal description" [{"action":"WITHDRAW", "action_strings":["1:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI", "k:stuart"], "action_decimals":[2.0], "action_integers":[]}])
+(env-gaslog)
+(commit-tx)
+;Correct
+
+;Test get-dao-propositions
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:11Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-propositions "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gaslog)
+(commit-tx)
+;Correct
+
+;Test get-dao-votes
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:11Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-proposal-vote-options "1:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gaslog)
+(commit-tx)
+;Correct
+
+;Test create-proposal-vote
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:11Z") })
+(env-gas 0) (env-gaslog)
+(coin.get-balance "k:stuart")
+(coin.get-balance "H0vCQlLSe2TfSPo5HRbVuYCrQ1dEsO4czzrAKD8l3r8")
+(test.dao-hive-factory.create-proposal-vote "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "1:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1)
+(coin.get-balance "k:stuart")
+(coin.get-balance "H0vCQlLSe2TfSPo5HRbVuYCrQ1dEsO4czzrAKD8l3r8")
+(test.dao-hive-factory.get-dao-propositions "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gaslog)
+(commit-tx)
+;Correct - The vote passed since stuart is the only member of the dao, and 2 coin was withdrawn to k:stuart
+
+;Test get-create-dao-proposal
+;Test "ADJUST_THRESHOLD" action
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:12Z") })
+(env-gas 0) (env-gaslog)
+(take 11 (format "{}" [(at 'block-time (chain-data))]))
+(test.dao-hive-factory.create-dao-proposal "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1000.0 "second proposal" "second proposal description" [{"action":"ADJUST_THRESHOLD", "action_strings":[], "action_decimals":[0.25], "action_integers":[]}])
+(env-gaslog)
+(test.dao-hive-factory.get-dao-propositions "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(commit-tx)
+;Correct
+
+;Test create-proposal-vote
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:13Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.create-proposal-vote "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "2:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.get-dao-propositions "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gaslog)
+(commit-tx)
+;Correct - The vote passed since stuart is the only member of the dao, and the daos threshold was adjusted to 0.45
+
+
+;Test get-create-dao-proposal
+;Test "ADJUST_THRESHOLD" action
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:14Z") })
+(env-gas 0) (env-gaslog)
+(take 11 (format "{}" [(at 'block-time (chain-data))]))
+(test.dao-hive-factory.create-dao-proposal "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1000.0 "adjust limit proposal" "adjust limit description" [{"action":"ADJUST_DAILY_LIMIT", "action_strings":[], "action_decimals":[], "action_integers":[100]}])
+(env-gaslog)
+(test.dao-hive-factory.get-dao-propositions "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(commit-tx)
+;Correct
+
+;Test create-proposal-vote
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:13Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.create-proposal-vote "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "3:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.get-dao-members "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gaslog)
+(commit-tx)
+;Correct - The vote passed, and emily was added to the hive
+
+;Test get-create-dao-proposal
+;Test "ADD_MEMBER" action
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:14Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.create-dao-proposal "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1000.0 "third proposal" "third proposal description" [{"action":"ADD_MEMBER", "action_strings":["k:emily"], "action_decimals":[], "action_integers":[]}])
+(env-gaslog)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(commit-tx)
+;Correct
+
+;Test create-proposal-vote
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:13Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.create-proposal-vote "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "4:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.get-dao-members "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gaslog)
+(commit-tx)
+;Correct - The vote passed, and emily was added to the hive
+
+;Test deposit-subject-treasury
+(begin-tx)
+(coin.get-balance "k:stuart")
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:14Z") })
+(test-capability (coin.TRANSFER "k:stuart" "H0vCQlLSe2TfSPo5HRbVuYCrQ1dEsO4czzrAKD8l3r8" 2.0))
+(test.dao-hive-factory.deposit-dao-treasury "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "1:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" coin 2.0 "to donate to cats")
+(coin.get-balance "k:stuart")
+(coin.get-balance "H0vCQlLSe2TfSPo5HRbVuYCrQ1dEsO4czzrAKD8l3r8")
+(commit-tx)
+;Correct stuart deposits 2 coin into the hives pool
+
+;Test get-create-dao-proposal
+;Test "SWAP" action
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:15Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-pools "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.create-dao-proposal "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1000.0 "fourth proposal" "fourth proposal description" [{"action":"SWAP", "action_strings":["1:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI", "2:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI"], "action_decimals":[1.0, 0.0], "action_integers":[]}])
+(env-gaslog)
+(commit-tx)
+;Correct
+
+;Test create-proposal-vote
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:16Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.stake-token.get-balance "9mP1OtrqBKVJQCQl91221ZFz_3__qsNmrKg8b_FO5xU")
+(test.dao-hive-factory.create-proposal-vote "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "5:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1)
+(test.stake-token.get-balance "9mP1OtrqBKVJQCQl91221ZFz_3__qsNmrKg8b_FO5xU")
+(test.dao-hive-factory.get-dao-pools "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gaslog)
+(commit-tx)
+;Correct - The vote passed, and the dao swapped
+
+
+;Test create-proposal-vote twice and test that we cannot vote twice!
+; (begin-tx)
+; (env-chain-data { "block-time" : (time "2022-04-20T00:00:17Z") })
+; (env-gas 0) (env-gaslog)
+; (test.dao-hive-factory.get-user-proposal-vote "k:stuart" "4:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+; (test.dao-hive-factory.create-proposal-vote "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "4:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1)
+; (env-gaslog)
+; (commit-tx)
+;Correct - we cannot vote twice
+
+
+;Test deposit-subject-treasury
+(begin-tx)
+(coin.get-balance "k:stuart")
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:17Z") })
+
+(test.dao-hive-factory.get-user-proposal-vote "k:stuart" "4:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+
+(test-capability (coin.TRANSFER "k:stuart" "H0vCQlLSe2TfSPo5HRbVuYCrQ1dEsO4czzrAKD8l3r8" 10.0))
+(test.dao-hive-factory.deposit-dao-treasury "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "1:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" coin 10.0 "for adding liquidity")
+(coin.get-balance "k:stuart")
+(coin.get-balance "H0vCQlLSe2TfSPo5HRbVuYCrQ1dEsO4czzrAKD8l3r8")
+(commit-tx)
+;Correct stuart deposits 2 coin into the hives pool
+
+
+;Test deposit-subject-treasury
+(begin-tx)
+(test.stake-token.get-balance "k:stuart")
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:18Z") })
+(test-capability (test.stake-token.TRANSFER "k:stuart" "9mP1OtrqBKVJQCQl91221ZFz_3__qsNmrKg8b_FO5xU" 10.0))
+(test.dao-hive-factory.deposit-dao-treasury "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "2:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" test.stake-token 10.0 "for adding liquidity")
+(test.stake-token.get-balance "k:stuart")
+(test.stake-token.get-balance "9mP1OtrqBKVJQCQl91221ZFz_3__qsNmrKg8b_FO5xU")
+(commit-tx)
+;Correct stuart deposits 2 coin into the hives pool
+
+;Test get-create-dao-proposal
+;Test "ADD_LIQUIDITY" action
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:19Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-pools "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.create-dao-proposal "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1000.0 "fifth proposal" "fith proposal descripiton" [{"action":"ADD_LIQUIDITY", "action_strings":["1:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI", "2:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI"], "action_decimals":[10.0, 10.0], "action_integers":[]}])
+(env-gaslog)
+(commit-tx)
+;Correct
+
+;Test create-proposal-vote
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:20Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.get-dao-pools "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.stake-token.get-balance "9mP1OtrqBKVJQCQl91221ZFz_3__qsNmrKg8b_FO5xU")
+(test.dao-hive-factory.create-proposal-vote "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "6:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1)
+(test.stake-token.get-balance "9mP1OtrqBKVJQCQl91221ZFz_3__qsNmrKg8b_FO5xU")
+(test.dao-hive-factory.get-dao-pools "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.stake-token.get-balance "9mP1OtrqBKVJQCQl91221ZFz_3__qsNmrKg8b_FO5xU")
+(coin.get-balance "iFd4Do9yrTAOcKfJ0LEcrCjqz9EGOpLTr2eMUjGZZ-w")
+(env-gaslog)
+(swap.tokens.get-balance "coin:test.stake-token" "iFd4Do9yrTAOcKfJ0LEcrCjqz9EGOpLTr2eMUjGZZ-w")
+;(swap.tokens.get-balance "coin:test.stake-token:test-pool" "9afUgQinchDehAudxuAEFRXJYi-PmffRJ_Qwx24tWJw")
+(commit-tx)
+;Correct - The vote passed, and the hive added liquidity to the dex
+
+;Test get-create-dao-proposal
+;Test "REMOVE_LIQUIDITY" action
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:21Z") })
+(test.dao-hive-factory.get-dao-members "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-pools "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.create-dao-proposal "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1000.0 "sixth proposal" "sixth proposal description" [{"action":"REMOVE_LIQUIDITY", "action_strings":["5:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI"], "action_decimals":[9.48], "action_integers":[]}])
+(env-gaslog)
+(swap.tokens.get-balance "coin:test.stake-token" "iFd4Do9yrTAOcKfJ0LEcrCjqz9EGOpLTr2eMUjGZZ-w")
+(commit-tx)
+;Correct
+
+;Test create-proposal-vote
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:22Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+;(swap.tokens.get-balance "coin:test.stake-token:test-pool" "9afUgQinchDehAudxuAEFRXJYi-PmffRJ_Qwx24tWJw")
+(swap.tokens.get-balance "coin:test.stake-token" "iFd4Do9yrTAOcKfJ0LEcrCjqz9EGOpLTr2eMUjGZZ-w")
+(test.dao-hive-factory.create-proposal-vote "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "7:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1)
+(swap.tokens.get-balance "coin:test.stake-token" "iFd4Do9yrTAOcKfJ0LEcrCjqz9EGOpLTr2eMUjGZZ-w")
+;(swap.tokens.get-balance "coin:test.stake-token:test-pool" "9afUgQinchDehAudxuAEFRXJYi-PmffRJ_Qwx24tWJw")
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.get-dao-pools "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(coin.get-balance "fxhAaAKdI8umso2_vCIzOMlkkkHXRmQL2mKf8cTe6lw")
+(test.stake-token.get-balance "fxhAaAKdI8umso2_vCIzOMlkkkHXRmQL2mKf8cTe6lw")
+(env-gaslog)
+(commit-tx)
+;Correct - The vote passed, and the liquidity was removed into 2 new hive pools
+
+;Test get-dao-members
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:23Z") })
+(test.dao-hive-factory.get-dao-members "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(commit-tx)
+
+;Test get-dao-members
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:24Z") })
+(test.dao-hive-factory.get-member-daos "k:stuart")
+(commit-tx)
+
+;Test edit-dao-info
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:25Z") })
+(test.dao-hive-factory.edit-dao-info "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "newimagelink" "newdescription" "newdescription2")
+(commit-tx)
+
+;Test get-dao-messages
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:26Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-messages "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gaslog)
+(commit-tx)
+;Correct
+
+
+;Test get-create-dao-proposal
+;Test "WITDHRAW"" action on auto created pool
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:27Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-pools "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(coin.get-balance "fxhAaAKdI8umso2_vCIzOMlkkkHXRmQL2mKf8cTe6lw")
+(test.dao-hive-factory.create-dao-proposal "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1000.0 "withdraw proposal" "withdraw 1kda description" [{"action":"WITHDRAW", "action_strings":["6:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI", "k:stuart"], "action_decimals":[1.0], "action_integers":[]}])
+(env-gaslog)
+(commit-tx)
+;Correct
+
+;Test create-proposal-vote
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:28Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(coin.get-balance "fxhAaAKdI8umso2_vCIzOMlkkkHXRmQL2mKf8cTe6lw")
+(coin.get-balance "k:stuart")
+(test.dao-hive-factory.create-proposal-vote "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "8:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1)
+(coin.get-balance "fxhAaAKdI8umso2_vCIzOMlkkkHXRmQL2mKf8cTe6lw")
+(coin.get-balance "k:stuart")
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.get-dao-members "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gaslog)
+(commit-tx)
+;Correct - The vote passed, and stuart withdrew 1 KDA from the auto-created pool
+
+;Test custom multichoice poll action
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:29Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-pools "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.create-dao-proposal "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1000.0 "custom proposal" "custom test" [{"action":"LOVE PIE", "action_strings":["custom 1"], "action_decimals":[], "action_integers":[]}, {"action":"HATE PIE", "action_strings":["custom 2"], "action_decimals":[], "action_integers":[]}])
+(env-gaslog)
+(commit-tx)
+;Correct
+
+;Test create-proposal-vote
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:30Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.create-proposal-vote "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "9:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 2)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.get-dao-propositions "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gaslog)
+(commit-tx)
+;Correct - The vote passed
+
+
+;Test get-create-dao-proposal
+;Test "REMOVE_MEMBER" action
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:31Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-members "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.create-dao-proposal "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1000.0 "remove member proposal" "remove member proposal description" [{"action":"REMOVE_MEMBER", "action_strings":["k:emily"], "action_decimals":[], "action_integers":[]}])
+(env-gaslog)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(commit-tx)
+;Correct
+
+;Test create-proposal-vote
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:32Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.is-member "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "k:stuart")
+(test.dao-hive-factory.get-dao-members "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.create-proposal-vote "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "10:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.get-dao-members "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gaslog)
+(commit-tx)
+;Correct - The vote passed, and emily was removed to the hive
+
+;Test edit account info
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:33Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.edit-account-info "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI"  "stuart")
+(test.dao-hive-factory.get-dao-members "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gaslog)
+(commit-tx)
+;Correct - stuarts account name was set
