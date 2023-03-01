@@ -47,7 +47,7 @@
 
   (defun gas-payer-guard ()
   (require-capability (GAS))
-  (at "miner-keyset" (read-msg))
+  (at "miner-keyset" (read-msg)) ;seems to enforce continuous only
   (enforce-below-or-at-gas-price 0.000001)
   (enforce-below-or-at-gas-limit 4000)
   )
