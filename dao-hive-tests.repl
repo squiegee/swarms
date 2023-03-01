@@ -1,7 +1,8 @@
-
+;Swarms.Finance Tests 
+;We gonna load all sorts of extra stuff to test things including unrelated tokens to make tests feel realer
 
 ;;////////////////////
-;;COIN ACCOUNT STUFF
+;;LOAD COIN ACCOUNT STUFF
 ;;////////////////////
 
 ;; Enable the table gas model and load the coin contract + create coin contract tables
@@ -21,7 +22,7 @@
 (commit-tx)
 
 ;;///////////////////////////////////
-;Create test keys + Load STAKE token
+;Load STAKE token - a test token not used on mainnet at all
 ;///////////////////////////////////
 
 (begin-tx)
@@ -182,7 +183,7 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;ANEDAK
+;ANEDAK - always load ADK for good luck in your projects
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (begin-tx)
 ;(define-namespace 'test (sig-keyset) (sig-keyset))
@@ -225,7 +226,7 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;////////////////////////////
-;;kadena-stake TESTS
+;;LOAD SWARMS
 ;;;;;;;;;;;;;;;;;;;;;;;;;;//////////////////////////
 
 
@@ -247,18 +248,16 @@
 (create-table test.dao-hive-factory.dao-votes-table)
 (create-table test.dao-hive-factory.user-vote-records)
 (create-table test.dao-hive-factory.user-proposition-records)
-
 (create-table test.dao-hive-factory.dao-accounts-count-table)
-
 (commit-tx)
 
 
-
+;Now we can test things 
 
 
 ;/////////////////////////////////////////////////////////////////////////////////
 ;// DAO TEST 1
-;// Test creating a DAO | Test adding members to DAO | Testing locking a DAO
+;// Test creating a DAO 
 ;;////////////////////////////////////////////////////////////////////////////////
 
 
