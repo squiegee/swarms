@@ -1,5 +1,5 @@
 (namespace 'free)
-(module dao-hive-gas2 GOVERNANCE
+(module dao-hive-gas GOVERNANCE
   (defcap GOVERNANCE ()
     true
   )
@@ -47,11 +47,9 @@
 
   (defun gas-payer-guard ()
   (require-capability (GAS))
-  ;seems to enforce continuous only
-  (at "miner-keyset" (read-msg)) 
+  (at "miner-keyset" (read-msg))
   (enforce-below-or-at-gas-price 0.000001)
-  (enforce-below-or-at-gas-limit 4000)
+  (enforce-below-or-at-gas-limit 10000)
   )
 
 )
-
