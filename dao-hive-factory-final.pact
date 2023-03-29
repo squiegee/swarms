@@ -1,6 +1,6 @@
 (namespace 'free)
 
-(module dao-hive-factory14 GOVERNANCE "Swarms.Finance DAO Hive Factory"
+(module dao-hive-factory16 GOVERNANCE "Swarms.Finance"
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;           Swarms.Finance           ;
 ;                 __                 ;
@@ -16,21 +16,22 @@
 
     ;;;;; CONSTANTS
     (defconst ACCOUNT_ID_CHARSET CHARSET_LATIN1
-    " Allowed character set for Account IDs. ")
+    "Allowed character set for Account IDs.")
 
     (defconst NAME_MIN_LENGTH 3
-      " Minimum character length for names. ")
+      "Minimum character length for names.")
 
     (defconst NAME_MAX_LENGTH 40
-      " Maximum character length for names. ")
+      "Maximum character length for names.")
 
     (defconst DESCRIPTION_MIN_LENGTH 3
-      " Minimum character length for names. ")
+      "Minimum character length for descriptions.")
 
     (defconst DESCRIPTION_MAX_LENGTH 400
-      " Maximum character length for names. ")
+      "Maximum character length for descriptions.")
 
-    ;;;;; CAPABILITIES
+    (defconst COMMANDS ["WITHDRAW","SWAP","ADD_LIQUIDITY","REMOVE_LIQUIDITY","ADJUST_DAILY_LIMIT","ADJUST_THRESHOLD","ADJUST_MIN_VOTETIME","ADD_MEMBER","REMOVE_MEMBER","ADJUST_MEMBER_ROLE"]
+    "Swarm Commands.")
 
     (defcap GOVERNANCE ()
       @doc "Verifies Contract Governance"
@@ -57,7 +58,7 @@
     )
 
     (defcap MEMBERS_GUARD(dao-id:string account:string)
-        @doc "Verifies account belongs to a treasurer"
+        @doc "Verifies account belongs to a dao member"
         (let*
                 (
                     (memberships (read dao-membership-ids-table account))
@@ -67,42 +68,34 @@
         )
     )
 
-    ;For adding accounts
     (defcap ADD_ACCOUNT
       (dao_id:string)
       true
     )
-    ;For adding accounts
     (defcap CAN_ADD
       (dao_id:string)
           (compose-capability (ADD_ACCOUNT dao_id))
     )
-    ;For updating dao update messages
     (defcap ADD_UPDATE
       (dao_id:string)
       true
     )
-    ;For updating dao update messages
     (defcap CAN_UPDATE
       (dao_id:string)
       (compose-capability (ADD_UPDATE dao_id))
     )
-    ;For creating voting options
     (defcap CAN_ADD_OPTION
       (proposal_id:string)
           (compose-capability (ADD_OPTION proposal_id))
     )
-    ;For creating voting options
     (defcap ADD_OPTION
       (proposal_id:string)
       true
     )
-    ;For completing dao actions
     (defcap COMPLETE_ACTION
       ()
       true
     )
-    ;For completing dao actions
     (defcap CAN_COMPLETE
       (proposal_id:string dao_id:string)
           (let*
@@ -116,8 +109,6 @@
               (compose-capability (COMPLETE_ACTION))
           )
     )
-
-    ;DAO guards
     (defcap PRIVATE_RESERVE
           (id:string account:string)
         true)
@@ -134,17 +125,12 @@
      (create-principal (create-pool-guard id account))
     )
 
-    ;;;;;;;;;; EVENTS ;;;;;;;;;;;;;;;;;;;;;;;;;;
-
     (defcap DAO_HIVE_UPDATED (dao_id:string update_time:time)
       @doc " Emitted when a DAO Hive is updated "
       @event true
     )
 
-    ;;;;;;;;;; SCHEMAS AND TABLES ;;;;;;;;;;;;;;
-
     (defschema dao-schema
-      @doc " DAO Hive schema "
       dao_id:string
       dao_name:string
       dao_creator:string
@@ -163,12 +149,13 @@
       dao_total_weight:decimal
       dao_use_weight:bool
       dao_all_can_propose:bool
+      dao_is_custom:bool
       dao_chain:string
       dao_active_chains:[string]
+      dao_roles:[string]
     )
 
     (defschema pool-record-schema
-      @doc " Pool record schema "
       pool_id:string
       pool_name:string
       pool_use_weight:bool
@@ -184,7 +171,6 @@
     )
 
     (defschema account-schema
-      @doc " Account schema "
       account_id:string
       account_name:string
       account_dao_id:string
@@ -192,10 +178,10 @@
       account_weight:decimal
       account_can_propose:bool
       account_count:integer
+      account_role:string
     )
 
     (defschema pool-action-schema
-      @doc " Pool action schema "
       action:string
       action_strings:[string]
       action_integers:[integer]
@@ -203,7 +189,6 @@
     )
 
     (defschema pool-proposal-schema
-      @doc " Pool proposal schema "
       proposal_id:string
       proposal_count:integer
       proposal_title:string
@@ -222,7 +207,6 @@
     )
 
     (defschema vote-schema
-      @doc " Stores votes "
       vote_count:integer
       vote_option:object{pool-action-schema}
       vote_description:string
@@ -230,39 +214,50 @@
     )
 
     (defschema dao-membership-schema
-      @doc " Stores account/dao memberships "
       dao_ids:[string]
     )
 
-    ;Message schema
     (defschema dao-message-schema
-      @doc " Message schema "
       message_from:string
       message_date:time
       message:string
       message_title:string
     )
 
-    ;User Vote Record Schema
     (defschema user-vote-record
-      @doc " Vote record schema "
       vote_account:string
       vote_proposal:string
       vote_time:time
       vote_option:integer
     )
 
-    ;User Proposition Record Schema
     (defschema user-proposition-record
-      @doc " Proposition record schema "
       pr_account:string
       pr_date:string
       pr_proposition_count:integer
       pr_propositions:[string]
     )
 
-    ;;;;;;;;;;TABLES;;;;;;;;;;
+    (defschema dao-threshold-schema
+      action:string
+      threshold:decimal
+      count:integer
+    )
 
+    (defschema add-dao-threshold-schema
+      action:string
+      threshold:decimal
+    )
+
+    (deftable dao-thresholds-table:{dao-threshold-schema})
+
+    (defschema dao-role-schema
+      role_name:string
+      role_cant_vote:[string]
+      role_cant_propose:[string]
+    )
+
+    (deftable dao-role-table:{dao-role-schema})
     (deftable daos-table:{dao-schema})
     (deftable dao-membership-ids-table:{dao-membership-schema})
     (deftable dao-messages-table:{dao-message-schema})
@@ -274,9 +269,6 @@
     (deftable user-vote-records:{user-vote-record})
     (deftable user-proposition-records:{user-proposition-record})
     (deftable dao-accounts-count-table:{account-schema})
-
-
-    ;//DAO COPY
 
     (defschema dao-schema-xchain
       @doc " DAO Multichain Copy schema "
@@ -294,12 +286,16 @@
       dao_total_weight:decimal
       dao_use_weight:bool
       dao_all_can_propose:bool
+      dao_is_custom:bool
       dao_members:[object{account-schema}]
+      dao_roles:[string]
+      consensus_thresholds:[object{dao-threshold-schema}]
+      roles:[object{dao-role-schema}]
     )
 
     (defpact copy-dao-crosschain:string
     ( account_id:string dao_id:string target-chain:string )
-    @doc "Migrate and copy DAO to new chain"
+    @doc "Copy DAO to other chain"
     (step
       (with-capability (ACCOUNT_GUARD account_id)
         (with-capability (MEMBERS_GUARD dao_id account_id)
@@ -307,15 +303,12 @@
           (enforce (!= "" target-chain) "empty target-chain")
           (enforce (!= (at 'chain-id (chain-data)) target-chain)
             "cannot run cross-chain transfers to the same chain")
-          (enforce (= (at 'chain-id (chain-data)) "0")
-            "crosschain from chain 0 only")
 
           (let*
               (
                   (dao-data (read daos-table dao_id))
                   (dao-locked:bool (at "dao_members_locked" dao-data))
               )
-              ;Log new chain
               (with-default-read daos-table dao_id
                 { "dao_active_chains" : [] }
                 { "dao_active_chains" := t-dao_active_chains}
@@ -328,7 +321,7 @@
                   true
                 )
               )
-              ;Dress & deliver xchain payload
+
               (let
                 ((crosschain-details:object{dao-schema-xchain}
                   { "dao_id"       : (at "dao_id" dao-data)
@@ -343,9 +336,13 @@
                   , "dao_members_locked"         : (at "dao_members_locked" dao-data)
                   , "dao_total_weight"         : (at "dao_total_weight" dao-data)
                   , "dao_use_weight"         : (at "dao_use_weight" dao-data)
+                  , "dao_is_custom"          : (at "dao_is_custom" dao-data)
                   , "dao_all_can_propose"         : (at "dao_all_can_propose" dao-data)
                   , "dao_creator"         : (at "dao_creator" dao-data)
                   , "dao_members"         : (get-all-dao-members dao_id)
+                  , "dao_roles" : (at "dao_roles" dao-data)
+                  , "consensus_thresholds" : (get-dao-thresholds dao_id)
+                  , "roles" : (get-dao-roles dao_id)
                   }
                 ))
                 (yield crosschain-details target-chain)
@@ -356,7 +353,6 @@
     )
 
     (step
-      ;Recieve xchain payload
       (resume
         { "dao_id"       := c_dao_id
         , "dao_name" := c_dao_name
@@ -370,11 +366,15 @@
         , "dao_members_locked"         := c_dao_members_locked
         , "dao_total_weight"         := c_dao_total_weight
         , "dao_use_weight"         := c_dao_use_weight
+        , "dao_is_custom"          := c_dao_is_custom
         , "dao_all_can_propose"         := c_dao_all_can_propose
         , "dao_creator"         := c_dao_creator
         , "dao_members"         := c_dao_members
+        , "dao_roles"           := c_dao_roles
+        , "consensus_thresholds" := c_consensus_thresholds
+        , "roles" := c_roles
         }
-        ;Migrate dao
+
         (with-default-read daos-table c_dao_id
           { "dao_pool_count" : 0, "dao_proposal_count" : 0, "dao_updates_count" : 0, "dao_messages_count" : 0 }
           { "dao_pool_count" := c_dao_pool_count, "dao_proposal_count" := c_dao_proposal_count, "dao_updates_count" := c_dao_updates_count, "dao_messages_count" := c_dao_messages_count }
@@ -398,12 +398,19 @@
                 "dao_total_weight": c_dao_total_weight,
                 "dao_use_weight": c_dao_use_weight,
                 "dao_all_can_propose": c_dao_all_can_propose,
+                "dao_is_custom": c_dao_is_custom,
                 "dao_chain": (at "chain-id" (chain-data)),
-                "dao_active_chains": [(at "chain-id" (chain-data))]
+                "dao_active_chains": [(at "chain-id" (chain-data))],
+                "dao_roles": c_dao_roles
             }
           )
         )
-        ;Migrate dao members
+
+        (with-capability (CAN_UPDATE c_dao_id)
+          (map (copy-threshold c_dao_id) c_consensus_thresholds)
+          (map (validate-roles dao_id) c_roles)
+        )
+
         (with-capability (CAN_ADD c_dao_id)
           (map (mass-copy) c_dao_members)
         )
@@ -414,7 +421,7 @@
 
 
   (defun mass-copy (new_account:object{account-schema})
-    @doc "DAO migration helper function"
+    @doc "Multichain copy helper function"
       (bind new_account {
                           "account_id" := account_id,
                           "account_name" := account_name,
@@ -422,10 +429,10 @@
                           "account_banned" := account_banned,
                           "account_weight" := account_weight,
                           "account_can_propose" := account_can_propose,
-                          "account_count" := account_count
+                          "account_count" := account_count,
+                          "account_role" := account_role
                         }
                         (require-capability (ADD_ACCOUNT account_dao_id))
-                        ;Log dao ID to member
                         (with-default-read dao-membership-ids-table account_id
                           { "dao_ids" : [] }
                           { "dao_ids" := t-member-ids}
@@ -438,7 +445,6 @@
                             true
                           )
                         )
-                        ;Migrate account
                         (write dao-accounts-table (get-user-key account_id account_dao_id)
                           {
                               "account_id": account_id,
@@ -447,10 +453,10 @@
                               "account_banned": account_banned,
                               "account_weight": account_weight,
                               "account_can_propose": account_can_propose,
-                              "account_count": account_count
+                              "account_count": account_count,
+                              "account_role": account_role
                           }
                         )
-                        ;Migrate account count
                         (write dao-accounts-count-table (get-2-key account_count account_dao_id)
                           {
                               "account_id": account_id,
@@ -459,18 +465,20 @@
                               "account_banned": account_banned,
                               "account_weight": account_weight,
                               "account_can_propose": account_can_propose,
-                              "account_count": account_count
+                              "account_count": account_count,
+                              "account_role": account_role
                           }
+                        )
+                        (write dao-updates-table (get-2-key 1 account_dao_id)
+                            {
+                                "message_from": "Hive",
+                                "message_date": (at "block-time" (chain-data)),
+                                "message_title": "Hive Crosschain Migration",
+                                "message": (format "The Hive successfully migrated to Chain {}" [(at "chain-id" (chain-data))])
+                            }
                         )
       )
     )
-
-
-    ;;///////////////////////
-    ;;DAO CREATION
-    ;;//////////////////////
-
-    ;Creates a new DAO Hive
 
     (defun create-dao
       (
@@ -485,10 +493,12 @@
         locked:bool
         all_propose:bool
         use_weights:bool
+        is_custom:bool
+        consensus_thresholds:[object:{add-dao-threshold-schema}]
+        roles:[object:{dao-role-schema}]
         )
         @doc "Creates a new DAO Hive"
         (with-capability (ACCOUNT_GUARD creator)
-            ;Enforce rules
             (enforce-valid-name name)
             (enforce-valid-description long_description)
             (enforce (>= min_proposal_time 0.0) "Positive Minimum Proposal Time Only")
@@ -502,7 +512,11 @@
                   (dao_id:string (create-account-key name creator))
                 )
 
-                ;Insert DAO
+                (with-capability (CAN_UPDATE dao_id)
+                  (map (validate-threshold dao_id) consensus_thresholds)
+                  (map (validate-roles dao_id) roles)
+                )
+
                 (insert daos-table dao_id
                     {
                         "dao_id": dao_id,
@@ -523,12 +537,17 @@
                         "dao_total_weight": 0.0,
                         "dao_use_weight": use_weights,
                         "dao_all_can_propose": all_propose,
+                        "dao_is_custom": is_custom,
                         "dao_chain": (at "chain-id" (chain-data)),
-                        "dao_active_chains": [(at "chain-id" (chain-data))]
+                        "dao_active_chains": [(at "chain-id" (chain-data))],
+                        "dao_roles": []
                     }
                 )
 
-                ;Insert new dao update
+                (with-capability (CAN_UPDATE dao_id)
+                  (map (insert-roles dao_id) roles)
+                )
+
                 (insert dao-updates-table (get-2-key 1 dao_id)
                     {
                         "message_from": "Hive",
@@ -538,7 +557,6 @@
                     }
                 )
 
-                ;Insert new dao messages
                 (insert dao-messages-table (get-2-key 1 dao_id)
                     {
                         "message_from": "Hive",
@@ -548,12 +566,10 @@
                     }
                 )
 
-                ;Add new members to dao
                 (with-capability (CAN_ADD dao_id)
                   (map (mass-adder dao_id) members )
                 )
 
-                ;Update creator with permissions
                 (update dao-accounts-table (get-user-key creator dao_id)
                   {
                       "account_can_propose": true
@@ -566,7 +582,6 @@
                   }
                 )
 
-                ;Return a message
                 (format "Created DAO Hive: {}" [dao_id])
 
             )
@@ -574,10 +589,94 @@
         )
     )
 
-    ;;Locks a dao so it's not editable by the dao creator
+    (defun validate-roles (dao_id:string role:object{dao-role-schema})
+      (require-capability (ADD_UPDATE dao_id))
+      (bind role {
+                    "role_name" := role_name,
+                    "role_cant_vote" := role_cant_vote:[string],
+                    "role_cant_propose" := role_cant_propose:[string]
+                  }
+                  (write dao-role-table (get-user-key dao_id role_name)
+                      {
+                          "role_name": role_name,
+                          "role_cant_vote": role_cant_vote,
+                          "role_cant_propose": role_cant_propose
+                      }
+                  )
+      )
+    )
+
+    (defun insert-roles (dao_id:string role:object{dao-role-schema})
+      (require-capability (ADD_UPDATE dao_id))
+      (let
+          (
+            (dao_roles:[string] (at "dao_roles" (read daos-table dao_id)) )
+          )
+          (bind role {
+                        "role_name" := role_name
+                      }
+                      (update daos-table dao_id
+                        {
+                            "dao_roles":  (+ [role_name] dao_roles )
+                        }
+                      )
+          )
+      )
+    )
+
+    (defun validate-threshold (dao_id:string thresholds:object{add-dao-threshold-schema})
+      (require-capability (ADD_UPDATE dao_id))
+      (bind thresholds {
+                          "action" := action,
+                          "threshold" := threshold
+                        }
+                        (enforce (<= threshold 1.0) "Threshold must be <= 1.0")
+                        (enforce (>= threshold 0.0) "Positive Threshold Only")
+                        (insert dao-thresholds-table (get-user-key dao_id action)
+                            {
+                                "action": action,
+                                "threshold": threshold,
+                                "count": 0
+                            }
+                        )
+
+      )
+    )
+
+    (defun copy-threshold (dao_id:string thresholds:object{dao-threshold-schema})
+      (require-capability (ADD_UPDATE dao_id))
+      (bind thresholds {
+                          "action" := action,
+                          "threshold" := threshold,
+                          "count" := count
+                        }
+                        (write dao-thresholds-table (get-user-key dao_id action)
+                            {
+                                "action": action,
+                                "threshold": threshold,
+                                "count": count
+                            }
+                          )
+      )
+    )
+
+    (defun update-threshold (dao_id:string amount:decimal action:string)
+      (require-capability (ADD_UPDATE dao_id))
+      (with-default-read dao-thresholds-table (get-user-key dao_id action)
+        { "count" : 0 }
+        { "count" := t-count:integer}
+        (write dao-thresholds-table (get-user-key dao_id action)
+          {
+              "action": action,
+              "threshold": amount,
+              "count": t-count
+          }
+        )
+      )
+    )
+
     (defun lock-dao
       (account_id:string dao_id:string)
-        @doc " Locks a DAO from being edited by its creator "
           (with-capability (ACCOUNT_GUARD account_id)
             (with-capability (CREATOR_GUARD dao_id)
             (update daos-table dao_id
@@ -586,17 +685,15 @@
               }
             )
             (with-capability (CAN_UPDATE dao_id)
-              (add-dao-update dao_id account_id "Hive Membership Locked" (format "Hive membership roster is now locked and members can no longer be added or edited by Hive Creator {}." [account_id]))
+              (add-dao-update dao_id account_id "Hive Locked" (format "Hive Creator {} has given up their special permissions to edit the Hive- The Hive is now officially locked." [account_id]))
             )
             (format "Locked Hive {}" [dao_id])
           )
        )
     )
 
-    ;Update dao info
     (defun edit-dao-info
       (account_id:string dao_id:string image:string long_description:string)
-        @doc " Update a DAO's info "
           (with-capability (ACCOUNT_GUARD account_id)
             (with-capability (MEMBERS_GUARD dao_id account_id)
               (enforce-valid-description long_description)
@@ -611,37 +708,72 @@
           )
     )
 
-    ;;///////////////////////
-    ;;DAO MEMBER ACCOUNTS
-    ;;//////////////////////
-
-    ;Object used for add multiple accounts at once
     (defschema add-account-schema
-    @doc " Add account schema "
+    @doc " Mass adder helper schema "
       id:string
     )
 
     (defschema add-account-schema-create
-    @doc " Add account schema "
+    @doc " Mass adder helper schema "
       id:string
       can_propose:bool
+      role:string
     )
 
-    ;Helper function to add multiple accounts at once when creating a DAO
     (defun mass-adder (dao_id:string new_accounts:object{add-account-schema-create})
       @doc " Adds multiple accounts to a DAO "
       (bind new_accounts {
                           "id" := new_id,
-                          "can_propose" := dao_can_propose
+                          "can_propose" := dao_can_propose,
+                          "role" := role
                         }
-                        (add-account dao_id new_id dao_can_propose)
+                        (add-account dao_id new_id dao_can_propose role)
       )
     )
 
+    (defun add-permissions (dao_id:string cant-vote-data:string)
+      (require-capability (ADD_UPDATE dao_id))
+      (map (add-permissions2 dao_id cant-vote-data) COMMANDS)
+    )
 
+    (defun add-permissions2 (dao_id:string command1:string command2:string)
+      (require-capability (ADD_UPDATE dao_id))
+      (if (!= command1 command2)
+            (with-default-read dao-thresholds-table (get-user-key dao_id command2)
+              { "count" : 0 }
+              { "count" := t-count}
+              (update dao-thresholds-table (get-user-key dao_id command2)
+                {
+                    "count": (+ t-count 1)
+                }
+              )
+            )
+            true
+          )
+    )
 
-    ;Adds account members to a dao - Permissioned
-    (defun add-account (dao_id:string new_account:string can_propose:bool)
+    (defun remove-permissions (dao_id:string cant-vote-data:string)
+      (require-capability (ADD_UPDATE dao_id))
+      (map (remove-permissions2 dao_id cant-vote-data) COMMANDS)
+    )
+
+    (defun remove-permissions2 (dao_id:string command1:string command2:string)
+      (require-capability (ADD_UPDATE dao_id))
+      (if (!= command1 command2)
+            (with-default-read dao-thresholds-table (get-user-key dao_id command2)
+              { "count" : 0 }
+              { "count" := t-count}
+              (update dao-thresholds-table (get-user-key dao_id command2)
+                {
+                    "count": (if (>= (- t-count 1) 0) (- t-count 1) 0)
+                }
+              )
+            )
+            true
+          )
+    )
+
+    (defun add-account (dao_id:string new_account:string can_propose:bool role:string)
       @doc " Adds a single account to a DAO "
       (require-capability (ADD_ACCOUNT dao_id))
         (with-default-read dao-membership-ids-table new_account
@@ -655,6 +787,15 @@
             )
             true
           )
+        )
+        (let*
+            (
+                (role-data (read dao-role-table (get-user-key dao_id role)))
+                (role-cant-vote-data (at "role_cant_vote" role-data))
+            )
+            (with-capability (CAN_UPDATE dao_id)
+              (map (add-permissions dao_id) role-cant-vote-data)
+            )
         )
         (with-default-read daos-table dao_id
           { "dao_updates_count" : 1, "dao_members_count" : 1, "dao_total_weight": 1.0 }
@@ -675,7 +816,8 @@
                 "account_banned": false,
                 "account_weight": 1.0,
                 "account_can_propose": can_propose,
-                "account_count": t-member-count
+                "account_count": t-member-count,
+                "account_role": role
             }
           )
           (insert dao-accounts-count-table (get-2-key t-member-count dao_id)
@@ -686,7 +828,8 @@
                 "account_banned": false,
                 "account_weight": 1.0,
                 "account_can_propose": can_propose,
-                "account_count": t-member-count
+                "account_count": t-member-count,
+                "account_role": role
             }
           )
           (update daos-table dao_id
@@ -699,7 +842,6 @@
         )
     )
 
-    ;Edit account name
     (defun edit-account-info
       (account_id:string dao_id:string new_id:string)
         @doc " Edit user account name "
@@ -726,7 +868,6 @@
           )
     )
 
-    ;Leave a dao
     (defun leave-hive
       (account_id:string dao_id:string)
         @doc " Leave a DAO "
@@ -761,6 +902,17 @@
                         )
                     )
               )
+              (let*
+                  (
+                      (account-data (read dao-accounts-table (get-user-key account_id dao_id)))
+                      (account-role (at "account_role" account-data))
+                      (role-data (read dao-role-table (get-user-key dao_id account-role)))
+                      (role-cant-vote-data (at "role_cant_vote" role-data))
+                  )
+                  (with-capability (CAN_UPDATE dao_id)
+                    (map (remove-permissions dao_id) role-cant-vote-data)
+                  )
+              )
               (with-read daos-table dao_id
                 { "dao_members_count" := t-member-count:integer}
                 (update daos-table dao_id
@@ -777,7 +929,6 @@
           )
     )
 
-    ;Removes a new member to a DAO if it isnt locked, Creator only
     (defun remove-dao-member
       (account_id:string dao_id:string member_to_remove:string)
         @doc " Adds new member to a DAO "
@@ -814,6 +965,17 @@
                               )
                           )
                     )
+                    (let*
+                        (
+                            (account-data (read dao-accounts-table (get-user-key member_to_remove dao_id)))
+                            (account-role (at "account_role" account-data))
+                            (role-data (read dao-role-table (get-user-key dao_id account-role)))
+                            (role-cant-vote-data (at "role_cant_vote" role-data))
+                        )
+                        (with-capability (CAN_UPDATE dao_id)
+                          (map (remove-permissions dao_id) role-cant-vote-data)
+                        )
+                    )
                     (with-read daos-table dao_id
                       { "dao_members_count" := t-member-count:integer}
                       (update daos-table dao_id
@@ -831,10 +993,8 @@
        )
     )
 
-
-    ;Adds a new member to a DAO if it isnt locked, Creator only
     (defun create-dao-member
-      (account_id:string dao_id:string new_member_id:string)
+      (account_id:string dao_id:string new_member_id:string role:string)
         @doc " Adds new member to a DAO "
           (with-capability (ACCOUNT_GUARD account_id)
             (with-capability (CREATOR_GUARD dao_id)
@@ -844,18 +1004,15 @@
                     (dao-locked:bool (at "dao_members_locked" dao-data))
                 )
                 (enforce (= dao-locked false) "Cannot add members to a locked Hive" )
-                ;Add new account
                 (with-capability (CAN_ADD dao_id)
-                  (add-account dao_id new_member_id false)
+                  (add-account dao_id new_member_id false role)
                 )
-                ;Return
                 (format "Added new member {} to Hive {}" [new_member_id dao_id])
               )
           )
        )
     )
 
-    ;Grants proposal creation permissions in an unlocked hive
     (defun grant-proposal-permissions
       (account_id:string dao_id:string new_member_id:string can_propose:bool)
         @doc " Grants DAO proposal permissions "
@@ -886,11 +1043,6 @@
        )
     )
 
-    ;;/////////////////////////
-    ;;DAO MESSAGES AND UPDATES
-    ;;/////////////////////////
-
-    ;Helper function to add updates to a DAO message board, Permissioned
     (defun add-dao-update
       (dao_id:string message_from:string message_title:string message:string)
         @doc " Posts an update to a Hive "
@@ -898,7 +1050,6 @@
               (with-default-read daos-table dao_id
               { "dao_updates_count" : 1 }
               { "dao_updates_count" := t-updates-count:integer}
-              ;Insert new update record
               (insert dao-updates-table (get-2-key (+ 1 t-updates-count) dao_id)
                   {
                       "message_from": "Hive",
@@ -907,18 +1058,15 @@
                       "message": message
                   }
               )
-              ;Update dao
               (update daos-table dao_id
                 {
                     "dao_updates_count": (+ 1 t-updates-count)
                 }
               )
-              ;Emit event
               (emit-event (DAO_HIVE_UPDATED dao_id (at "block-time" (chain-data))))
             )
     )
 
-    ;Posts a users message to a DAO's message board
     (defun create-dao-message
       (account_id:string dao_id:string message_title:string message:string)
         @doc " Posts a message to a Hive "
@@ -932,7 +1080,6 @@
                           (account-data (read dao-accounts-table (get-user-key account_id dao_id)))
                           (account-name (at "account_name" account-data))
                       )
-                      ;Insert new message record
                       (insert dao-messages-table (get-2-key (+ 1 t-messages-count) dao_id)
                           {
                               "message_from": account_id,
@@ -941,7 +1088,6 @@
                               "message": message
                           }
                       )
-                      ;Update dao message count
                       (update daos-table dao_id
                         {
                             "dao_messages_count": (+ 1 t-messages-count)
@@ -949,17 +1095,11 @@
                       )
                   )
                 )
-                ;Return
                 (format "Posted new message at Hive {}" [dao_id])
               )
           )
     )
 
-    ;;///////////////////////
-    ;;DAO TREASURY POOLS
-    ;;//////////////////////
-
-    ;Creates a pool/vault within a DAO, of which the DAO governs
     (defun create-dao-treasury-pool
       (account_id:string dao_id:string token:module{fungible-v2} pool_name:string pool_description:string)
         @doc "Creates a pool for a specific token within a Hive"
@@ -973,9 +1113,7 @@
                     (account-data (read dao-accounts-table (get-user-key account_id dao_id)))
                     (account-name (at "account_name" account-data))
                 )
-                ;Create treasury account
                 (token::create-account new-treasury-account (create-pool-guard dao_id new-treasury-account))
-                ;Insert new pool record
                 (insert dao-pools-table (get-2-key (+ 1 pool-count) dao_id)
                       {
                           "pool_id": (get-2-key (+ 1 pool-count) dao_id),
@@ -992,24 +1130,20 @@
                           "pool_auto": false
                       }
                 )
-                ;Update dao pool count
                 (update daos-table dao_id
                       {
                           "dao_pool_count": (+ 1 pool-count)
                       }
                 )
-                ;Update dao
                 (with-capability (CAN_UPDATE dao_id)
                   (add-dao-update dao_id account_id "New Hive Pool Created" (format "Hive pool {} has been created by {} to manage {} tokens" [(get-2-key (+ 1 pool-count) dao_id) account-name (get-token-key token)]))
                 )
-                ;Return a message
                 (format "Created new pool {} for Hive {}" [new-treasury-account dao_id])
               )
           )
         )
     )
 
-    ;Deposits tokens into a one of a DAO's pools/vaults
     (defun deposit-dao-treasury
       (account_id:string dao_id:string pool_id:string token:module{fungible-v2} amount:decimal reason:string)
         @doc " Deposits tokens to a Hive treasury pool "
@@ -1026,14 +1160,11 @@
                     (pool-u-weight (at "pool_use_weight" treasury-data))
                     (account-count:integer (at "account_count" (read dao-accounts-table (get-user-key account_id dao_id))))
                 )
-
-                ;Enforce rules
+                
                 (enforce (> amount 0.0) "Can only deposit positive amounts")
                 (enforce-unit amount (token::precision))
                 (enforce (= pool-lp false) "LP Token Pool")
-
                 (if (= pool-u-weight true)
-                  ;Update dao weight
                   (update daos-table dao_id
                     {
                         "dao_total_weight": (+ (* amount pool-weight) current-weight)
@@ -1041,13 +1172,11 @@
                   )
                   true
                 )
-
                 (if (= pool-u-weight true)
                   (let*
                       (
                         (weighted true)
                       )
-                      ;Update user weight
                       (update dao-accounts-table (get-user-key account_id dao_id)
                         {
                             "account_weight": (+  (* amount pool-weight) current-user-weight)
@@ -1061,21 +1190,15 @@
                   )
                   true
                 )
-
-
                 (token::transfer account_id treasury-account amount)
-
                 (with-capability (CAN_UPDATE dao_id)
                   (add-dao-update dao_id account_id (format "{} {} was deposited into Vault {}" [amount (get-token-key token) vault-name]) reason)
                 )
             )
-
-            ;Return a message
             (format "Deposited {} {} into pool {}" [amount (get-token-key token) pool_id])
         )
     )
 
-    ;Deposits tokens into a one of a DAO's pools/vaults
     (defun pay-dao-treasury
       (account_id:string dao_id:string pool_id:string token:module{fungible-v2} amount:decimal reason:string)
         @doc " Pays tokens to a Hive treasury pool "
@@ -1090,14 +1213,10 @@
                     (pool-weight (at "pool_weight" treasury-data))
                     (pool-u-weight (at "pool_use_weight" treasury-data))
                 )
-
-                ;Enforce rules
                 (enforce (> amount 0.0) "Can only deposit positive amounts")
                 (enforce-unit amount (token::precision))
                 (enforce (= pool-lp false) "LP Token Pool")
-
                 (if (= pool-u-weight true)
-                  ;Update dao weight
                   (update daos-table dao_id
                     {
                         "dao_total_weight": (+ (* amount pool-weight) current-weight)
@@ -1107,22 +1226,14 @@
                 )
 
                 (token::transfer account_id treasury-account amount)
-
                 (with-capability (CAN_UPDATE dao_id)
                   (add-dao-update dao_id account_id (format "{} {} was deposited into Vault {}" [amount (get-token-key token) vault-name]) reason)
                 )
             )
-
-            ;Return a message
             (format "Deposited {} {} into pool {}" [amount (get-token-key token) pool_id])
         )
     )
 
-    ;;//////////////////////////
-    ;;DAO ACTIONS + PROPOSALS
-    ;;/////////////////////////
-
-    ;Creates a new DAO proposal to perform a action (see above) at the DAO
     (defun create-dao-proposal
       (account_id:string dao_id:string run_time:decimal title:string description:string actions:[object:{pool-action-schema}] )
         @doc " Creates a proposal at a Hive "
@@ -1151,11 +1262,22 @@
                         (account-name (at "account_name" account-data))
                         (anyone-can-propose (at "dao_all_can_propose" dao-data))
                         (user-can-propose (at "account_can_propose" account-data))
+                        (dao-is-custom (at "dao_is_custom" dao-data))
+                        (account-data (read dao-accounts-table (get-user-key account_id dao_id)))
+                        (account-role (at "account_role" account-data))
+                        (role-data (read dao-role-table (get-user-key  dao_id account-role)))
+                        (cant-propose (at "role_cant_propose" role-data))
                       )
                       (enforce (>= (length actions) 1) "Vote must contain atleast 1 option")
 
                       (if (= anyone-can-propose false)
-                       (enforce (= user-can-propose true) "You do not have permission to make proposals in this Hive")
+                       (if (= dao-is-custom false)
+                        (enforce (= user-can-propose true) "You do not have permission to make proposals in this Hive")
+                       true)
+                       true)
+
+                      (if (= dao-is-custom true)
+                       (map (validate-proposal-action cant-propose) new-actions)
                        true)
 
                       (insert dao-proposals-table proposal_id
@@ -1183,13 +1305,13 @@
                         }
                       )
 
-                      (with-default-read user-proposition-records (get-user-key account_id (take 11 date))
+                      (with-default-read user-proposition-records (get-user-key (get-user-key account_id dao_id) (take 11 date))
                         { "pr_proposition_count" : 0, "pr_propositions" : [] }
                         { "pr_proposition_count" := t-user-proposal-count:integer, "pr_propositions" := t-user-propositions}
 
                         (enforce (<= t-user-proposal-count proposal_limit) "Daily proposal limit reached")
 
-                        (write user-proposition-records (get-user-key account_id (take 11 date))
+                        (write user-proposition-records (get-user-key (get-user-key account_id dao_id) (take 11 date))
                             {
                                 "pr_account": proposal_id,
                                 "pr_date": (take 11 date),
@@ -1214,8 +1336,12 @@
           )
     )
 
+    (defun validate-proposal-action (cant-propose:[string] action:object:{pool-action-schema})
+      (bind action { "action" := t_action:string }
+        (enforce (= (contains t_action cant-propose) false) "Proposal permissions not granted")
+      )
+    )
 
-    ;Helper function to add voting options to a proposal
     (defun _add-option (proposal_id:string action:object:{pool-action-schema})
       @doc " Adds a voting option to a proposal - Permissioned "
       (require-capability (ADD_OPTION proposal_id))
@@ -1224,7 +1350,6 @@
             (proposal-data (read dao-proposals-table proposal_id ["proposal_options_count"]))
             (options-count (at "proposal_options_count" proposal-data))
           )
-          ;Enforce rules depending on action
             (bind action { "action" := t_action:string, "action_strings" := t_action_strings:[string], "action_integers" := t_action_integers:[integer], "action_decimals" := t_action_decimals:[decimal] }
               (cond ((= t_action "WITHDRAW") (let*
                                                 (
@@ -1363,24 +1488,20 @@
                                                 )
                                                 (insert-option proposal_id options-count (get-2-key options-count proposal_id) (format "Remove member {} from the Hive" [member-id]) action )
                                               ))
+                    ((= t_action "ADJUST_MEMBER_ROLE") (let*
+                                                (
+                                                  (ADJUST_ROLE true)
+                                                  (member-id (at 0 t_action_strings))
+                                                  (new-role (at 1 t_action_strings))
+                                                )
+                                                (insert-option proposal_id options-count (get-2-key options-count proposal_id) (format "Set Hive Member {} role to {}" [member-id new-role]) action )
+                                              ))
                     ((= t_action "AGAINST") (let*
                                                   (
                                                     (AGAINST true)
                                                   )
                                                   (insert-option proposal_id options-count (get-2-key options-count proposal_id) "Against" action )
                                                 ))
-                    ((= t_action "ENABLE_WEIGHT") (let*
-                                                        (
-                                                          (ENABLE_WEIGHT true)
-                                                        )
-                                                        (insert-option proposal_id options-count (get-2-key options-count proposal_id) "Switch the Hive's consensus method to Weight Mode" action )
-                                                      ))
-                    ((= t_action "ENABLE_PROPOSAL_CONTROL") (let*
-                                                        (
-                                                          (ENABLE_PROPOSAL_CONTROL true)
-                                                        )
-                                                        (insert-option proposal_id options-count (get-2-key options-count proposal_id) "Switch the Hive to only allow proposals to be created by designated members" action )
-                                                      ))
                     ((= t_action "SET_WEIGHT") (let*
                                                         (
                                                           (SET_WEIGHT true)
@@ -1405,12 +1526,10 @@
           )
     )
 
-    ;Helper function to insert voting options
     (defun insert-option
       (proposal_id:string current_option_count:integer key:string description:string action:object:{pool-action-schema})
       @doc " Adds a voting option to a proposal - Permissioned "
       (require-capability (ADD_OPTION proposal_id))
-        ;Insert new vote option
         (insert dao-votes-table key
             {
                 "vote_count": 0,
@@ -1419,7 +1538,6 @@
                 "vote_weight": 0.0
             }
         )
-        ;Update dao proposal count
         (update dao-proposals-table proposal_id
           {
               "proposal_options_count": (+ 1 current_option_count)
@@ -1427,7 +1545,6 @@
         )
     )
 
-    ;Votes for or against a DAO proposal
     (defun create-proposal-vote
       (account_id:string dao_id:string proposal_id:string vote:integer)
         @doc " Votes on a proposal at a Hive "
@@ -1438,14 +1555,28 @@
                     (dao-data (read daos-table dao_id))
                     (proposal-data (read dao-proposals-table proposal_id))
                     (vote-id (get-2-key vote proposal_id))
+                    (vote-id2 (if (= vote 2) (get-2-key 1 proposal_id) false))
                     (vote-data (read dao-votes-table vote-id))
-                    (vote-count (at "vote_count" vote-data) )
+                    (vote-data2 (if (= vote 2) (read dao-votes-table vote-id2) false))
+                    (vote-count (at "vote_count" vote-data))
+                    (vote-option:object{pool-action-schema} (at "vote_option" vote-data))
+                    (vote-option2:object{pool-action-schema} (if (= vote 2) (at "vote_option" vote-data2) (at "vote_option" vote-data)))
+                    (vote-action (at "action" vote-option))
+                    (vote-action2 (if (= vote 2) (at "action" vote-option2) "NONULLS"))
+                    (account-data (read dao-accounts-table (get-user-key account_id dao_id)))
+                    (account-role (at "account_role" account-data))
+                    (role-data (read dao-role-table (get-user-key  dao_id account-role)))
+                    (cant-vote (at "role_cant_vote" role-data))
+                    (action-consensus (if (= (contains vote-action COMMANDS) true)
+                    (if (!= vote-action2 "NONULLS") (read dao-thresholds-table (get-user-key dao_id vote-action2)) (read dao-thresholds-table (get-user-key dao_id vote-action)))
+                     1.0 ))
+                    (action-threshold (if (= (contains vote-action COMMANDS) true) (at "threshold" action-consensus) (at "dao_threshold" dao-data)) )
                     (end-time (at "proposal_end_time" proposal-data))
                     (ended (at "proposal_completed" proposal-data))
                     (options-count (at "proposal_options_count" proposal-data))
-                    (member-count (at "dao_members_count" dao-data))
+                    (member-count (if (= (at "dao_is_custom" dao-data) true) (if (= (contains vote-action COMMANDS) true) (at "count" action-consensus) (at "dao_members_count" dao-data)) (at "dao_members_count" dao-data)) )
                     (threshold (at "dao_threshold" dao-data))
-                    (required-count (* member-count threshold))
+                    (required-count (* member-count action-threshold))
                     (total-weight (at "dao_total_weight" dao-data))
                     (vote-weight (at "vote_weight" vote-data) )
                     (user-weight (at "account_weight" (read dao-accounts-table (get-user-key account_id dao_id))))
@@ -1454,52 +1585,30 @@
                     (weighted-voter-threshold (at "dao_voter_threshold" dao-data))
                     (weighted-required-voters (* member-count weighted-voter-threshold))
                   )
-                  ;Enforce rules
-                  (enforce (> (diff-time end-time (at "block-time" (chain-data))) 0.0 ) "This proposal has already ended")
-                  (enforce (= ended false) "This proposal has passed already")
-                  (enforce (>= vote 0) "This voting option doesnt exist")
-                  (enforce (<= vote options-count) "This voting option doesnt exist")
-
-                  ;Update vote count/weight
-                  (update dao-votes-table vote-id
-                    {
-                        "vote_count": (+ 1 vote-count),
-                        "vote_weight": (+ user-weight vote-weight)
-                    }
-                  )
-
-                  ;Record vote
-                  (insert user-vote-records (get-user-key account_id proposal_id)
+                    (enforce (> (diff-time end-time (at "block-time" (chain-data))) 0.0 ) "This proposal has already ended")
+                    (enforce (= ended false) "This proposal has passed already")
+                    (enforce (>= vote 0) "This voting option doesnt exist")
+                    (enforce (<= vote options-count) "This voting option doesnt exist")
+                    (enforce (= (contains vote-action cant-vote) false) "Voting permissions not granted")
+                    (update dao-votes-table vote-id
                       {
-                          "vote_account": account_id,
-                          "vote_proposal": proposal_id,
-                          "vote_time": (at 'block-time (chain-data)),
-                          "vote_option": vote
+                          "vote_count": (+ 1 vote-count),
+                          "vote_weight": (+ user-weight vote-weight)
                       }
-                  )
-
-                  ;Check for consensus
-                  (if (= do-weight true)
-                  ;Weighted Consensus Check
-                    (if (and (>= (+ user-weight vote-weight) required-weight) (>= (* (+ 1 vote-count) 1.0) weighted-required-voters))
-                      (let
-                          (
-                            (VOTE-PASSED true)
-                          )
-                          (with-capability (CAN_COMPLETE proposal_id dao_id)
-                            (complete-proposal-action dao_id proposal_id vote-id)
-                          )
-                          (update dao-proposals-table proposal_id
-                            {
-                                "proposal_completed_consensus": (+ user-weight vote-weight),
-                                "proposal_completed_voter_consensus": (* (+ 1 vote-count) 1.0)
-                            }
-                          )
-                      )
-                      true
                     )
-                  ;Non-Weighted Consensus Check
-                    (if (>=  (* (+ 1 vote-count) 1.0) required-count)
+
+                    (insert user-vote-records (get-user-key account_id proposal_id)
+                        {
+                            "vote_account": account_id,
+                            "vote_proposal": proposal_id,
+                            "vote_time": (at 'block-time (chain-data)),
+                            "vote_option": vote
+                        }
+                    )
+
+                    (if (= do-weight true)
+                    ;Weighted Consensus Check
+                      (if (and (>= (+ user-weight vote-weight) required-weight) (>= (* (+ 1 vote-count) 1.0) weighted-required-voters))
                         (let
                             (
                               (VOTE-PASSED true)
@@ -1509,23 +1618,39 @@
                             )
                             (update dao-proposals-table proposal_id
                               {
-                                  "proposal_completed_consensus": required-weight,
-                                  "proposal_completed_voter_consensus": required-count
+                                  "proposal_completed_consensus": (+ user-weight vote-weight),
+                                  "proposal_completed_voter_consensus": (* (+ 1 vote-count) 1.0)
                               }
                             )
                         )
                         true
+                      )
+                    ;Non-Weighted Consensus Check
+                      (if (>=  (* (+ 1 vote-count) 1.0) required-count)
+                          (let
+                              (
+                                (VOTE-PASSED true)
+                              )
+                              (with-capability (CAN_COMPLETE proposal_id dao_id)
+                                (complete-proposal-action dao_id proposal_id vote-id)
+                              )
+                              (update dao-proposals-table proposal_id
+                                {
+                                    "proposal_completed_consensus": required-weight,
+                                    "proposal_completed_voter_consensus": required-count
+                                }
+                              )
+                          )
+                          true
+                      )
                     )
-                  )
-                  ;Return
-                  (format "Voted for option {} on proposal {}" [vote proposal_id])
+                    (format "Voted for option {} on proposal {} ac:{} at:{} rc:{}" [vote-action proposal_id action-consensus action-threshold required-count])
+
               )
             )
           )
     )
 
-
-    ;Processes proposal actions through a decision pipeline when a proposal is completed
     (defun complete-proposal-action (dao_id:string proposal_id:string vote_id:string)
       (require-capability (COMPLETE_ACTION))
         (let*
@@ -1534,7 +1659,6 @@
                 (action-data:object{pool-action-schema} (at "vote_option" vote-data))
                 (proposal_count (at "proposal_count" (read dao-proposals-table proposal_id)))
               )
-              ;Handle new voted action
               (bind action-data { "action" := t_action:string, "action_strings" := t_action_strings:[string], "action_integers" := t_action_integers:[integer], "action_decimals" := t_action_decimals:[decimal] }
                 (cond ((= t_action "WITHDRAW") (let*
                                                     (
@@ -1580,10 +1704,8 @@
                                                       (from-pool-balance (from-pool-tokenA::get-balance from-pool-account))
                                                       (swap-account (at 'account (free.dao-hive-reference.kds-get-pair from-pool-tokenA to-pool-tokenB)))
                                                     )
-                                                    ;(swap-account (at 'account (swap.exchange.get-pair from-pool-tokenA to-pool-tokenB)))
                                                     (install-capability (from-pool-tokenA::TRANSFER from-pool-account swap-account swap-in-amount))
                                                     (with-capability (PRIVATE_RESERVE dao_id from-pool-account)
-                                                      ;(swap.exchange.swap-exact-in swap-in-amount 0.0 [from-pool-tokenA to-pool-tokenB] from-pool-account to-pool-account (at "guard" (to-pool-tokenB::details to-pool-account)) )
                                                       (free.dao-hive-reference.kds-swap-exact-in swap-in-amount from-pool-tokenA to-pool-tokenB from-pool-account to-pool-account)
                                                     )
                                                     (with-capability (CAN_UPDATE dao_id)
@@ -1622,8 +1744,6 @@
                                                   (pool-count:integer (at "dao_pool_count" dao-data))
                                                   (lp-pool-pair (free.dao-hive-reference.kds-get-pair-key tokenA tokenB))
                                                 )
-                                                ;(swap-account (at 'account (swap.exchange.get-pair tokenA tokenB)))
-                                                ;(lp-pool-pair (swap.exchange.get-pair-key tokenA tokenB))
                                                 (tokenA::create-account new-treasury-account (create-pool-guard dao_id new-treasury-account))
                                                 (tokenB::create-account new-treasury-account (create-pool-guard dao_id new-treasury-account))
                                                 (insert dao-pools-table (get-2-key (+ 1 pool-count) dao_id)
@@ -1688,7 +1808,6 @@
                                                 (with-capability (PRIVATE_RESERVE dao_id new-treasury-account)
                                                   (free.dao-hive-reference.kds-add-liquidity tokenA tokenB add-amount-A add-amount-B new-treasury-account (create-pool-guard dao_id new-treasury-account))
                                                 )
-                                                ;(swap.exchange.add-liquidity tokenA tokenB add-amount-A add-amount-B 0.0 0.0 new-treasury-account new-treasury-account (create-pool-guard dao_id new-treasury-account))
                                                 (with-capability (CAN_UPDATE dao_id)
                                                   (add-dao-update dao_id dao_id (format "Proposal {} Passed" [proposal_count]) (format "The Hive added {} {} and {} {} token liquidity to the KDS - 2 Pools were added to the Hive in order to perform this action and may contain some left over tokens from KDS." [add-amount-A tokenA add-amount-B tokenB]))
                                                 )
@@ -1758,7 +1877,6 @@
                                                 (with-capability (PRIVATE_RESERVE dao_id lp-pool-account)
                                                   (free.dao-hive-reference.kds-remove-liquidity tokenA tokenB remove-amount lp-pool-account new-treasury-account (create-pool-guard dao_id new-treasury-account) lp-pool-pair swap-account remove-amount)
                                                 )
-                                                ;(swap.exchange.remove-liquidity tokenA tokenB remove-amount 0.0 0.0 lp-pool-account new-treasury-account (create-pool-guard dao_id new-treasury-account))
                                                 (with-capability (CAN_UPDATE dao_id)
                                                   (add-dao-update dao_id dao_id (format "Proposal {} Passed" [proposal_count]) (format "The Hive removed {} {} liquidity from KDS - 2 Pools were added to the Hive and contain all the tokens withdrawn while performing this action." [remove-amount lp-pool-pair]))
                                                 )
@@ -1795,6 +1913,10 @@
                                                             (
                                                               (ADJUST_THRESHOLD true)
                                                               (new-threshold (at 0 t_action_decimals))
+                                                              (new-action (at 0 t_action_strings))
+                                                            )
+                                                            (with-capability (CAN_UPDATE dao_id)
+                                                              (if (= (contains (at 0 t_action_strings) COMMANDS) true) (update-threshold dao_id new-threshold new-action)  (map (update-threshold dao_id new-threshold) COMMANDS) )
                                                             )
                                                             (update daos-table dao_id
                                                               {
@@ -1858,9 +1980,10 @@
                                                       (
                                                         (ADD_MEMBER true)
                                                         (new-member-id (at 0 t_action_strings))
+                                                        (new-member-role (at 1 t_action_strings))
                                                       )
                                                       (with-capability (CAN_ADD dao_id)
-                                                        (add-account dao_id new-member-id false)
+                                                        (add-account dao_id new-member-id false new-member-role)
                                                       )
                                                       (with-capability (CAN_UPDATE dao_id)
                                                         (add-dao-update dao_id dao_id (format "Proposal {} Passed" [proposal_count]) (format "New member {} has been voted into the Hive" [new-member-id]))
@@ -1914,6 +2037,17 @@
                                                                       )
                                                                   )
                                                             )
+                                                            (let*
+                                                                (
+                                                                    (account-data (read dao-accounts-table (get-user-key remove-member-id dao_id)))
+                                                                    (account-role (at "account_role" account-data))
+                                                                    (role-data (read dao-role-table (get-user-key dao_id account-role)))
+                                                                    (role-cant-vote-data (at "role_cant_vote" role-data))
+                                                                )
+                                                                (with-capability (CAN_UPDATE dao_id)
+                                                                  (map (remove-permissions dao_id) role-cant-vote-data)
+                                                                )
+                                                            )
                                                             (with-read daos-table dao_id
                                                               { "dao_members_count" := t-member-count:integer}
                                                               (update daos-table dao_id
@@ -1928,6 +2062,49 @@
                                                         )
                                                       )
 
+                                                      (update dao-proposals-table proposal_id
+                                                        {
+                                                            "proposal_completed": true,
+                                                            "proposal_completed_time": (at 'block-time (chain-data)),
+                                                            "proposal_completed_action": t_action
+                                                        }
+                                                      )
+                                                    ))
+                      ((= t_action "ADJUST_MEMBER_ROLE") (let*
+                                                      (
+                                                        (ADD_MEMBER true)
+                                                        (member-id (at 0 t_action_strings))
+                                                        (new-member-role (at 1 t_action_strings))
+                                                        (dao-data (read daos-table dao_id))
+                                                        (dao-roles (at "dao_roles" dao-data))
+                                                        (account-data (read dao-accounts-table (get-user-key member-id dao_id)))
+                                                        (account-count (at "account_count" account-data))
+                                                        (old-role (at "account_role" account-data))
+                                                        (role-data (read dao-role-table (get-user-key dao_id old-role)))
+                                                        (role-cant-vote-data (at "role_cant_vote" role-data))
+                                                        (new-role-data (read dao-role-table (get-user-key dao_id new-member-role)))
+                                                        (new-role-cant-vote-data (at "role_cant_vote" new-role-data))
+                                                      )
+                                                      (enforce (= (contains new-member-role dao-roles) true) "Role doesnt exist.")
+                                                      (update dao-accounts-table (get-user-key member-id dao_id)
+                                                        {
+                                                          "account_role": new-member-role
+                                                        }
+                                                      )
+                                                      (update dao-accounts-count-table (get-2-key account-count dao_id)
+                                                          {
+                                                              "account_role": new-member-role
+                                                          }
+                                                      )
+                                                      (with-capability (CAN_UPDATE dao_id)
+                                                        (map (remove-permissions dao_id) role-cant-vote-data)
+                                                      )
+                                                      (with-capability (CAN_UPDATE dao_id)
+                                                        (map (add-permissions dao_id) new-role-cant-vote-data)
+                                                      )
+                                                      (with-capability (CAN_UPDATE dao_id)
+                                                        (add-dao-update dao_id dao_id (format "Proposal {} Passed" [proposal_count]) (format "Member {} role has been changed from {} to {}" [member-id old-role new-member-role]))
+                                                      )
                                                       (update dao-proposals-table proposal_id
                                                         {
                                                             "proposal_completed": true,
@@ -1951,70 +2128,6 @@
                                                         }
                                                       )
                                                     ))
-                      ((= t_action "ENABLE_PROPOSAL_CONTROL") (let*
-                                                            (
-                                                              (ENABLE_PROPOSAL_CONTROL true)
-                                                              (dao-data (read daos-table dao_id))
-                                                              (dao-locked (at "dao_members_locked" dao-data))
-                                                            )
-                                                            (if (= dao-locked true)
-                                                              (with-capability (CAN_UPDATE dao_id)
-                                                                (add-dao-update dao_id dao_id (format "Proposal {} Failed" [proposal_count]) "Proposal Control cannot be enabled for this type of Hive")
-                                                              )
-                                                              (let
-                                                                  (
-                                                                    (ENABLE_CONTROL true)
-                                                                  )
-                                                                  (update daos-table dao_id
-                                                                    {
-                                                                        "dao_all_can_propose": false
-                                                                    }
-                                                                  )
-                                                                  (with-capability (CAN_UPDATE dao_id)
-                                                                    (add-dao-update dao_id dao_id (format "Proposal {} Passed" [proposal_count]) "Proposals can now only be created by members designated by the Hive's creator")
-                                                                  )
-                                                              )
-                                                            )
-                                                            (update dao-proposals-table proposal_id
-                                                              {
-                                                                  "proposal_completed": true,
-                                                                  "proposal_completed_time": (at 'block-time (chain-data)),
-                                                                  "proposal_completed_action": t_action
-                                                              }
-                                                            )
-                                                          ))
-                      ((= t_action "ENABLE_WEIGHT") (let*
-                                                            (
-                                                              (ENABLE_WEIGHT true)
-                                                              (dao-data (read daos-table dao_id))
-                                                              (dao-locked (at "dao_members_locked" dao-data))
-                                                            )
-                                                            (if (= dao-locked true)
-                                                              (with-capability (CAN_UPDATE dao_id)
-                                                                (add-dao-update dao_id dao_id (format "Proposal {} Failed" [proposal_count]) "Weight Mode cannot be enabled for this type of Hive")
-                                                              )
-                                                              (let
-                                                                  (
-                                                                    (ENABLE_WEIGHTS true)
-                                                                  )
-                                                                  (update daos-table dao_id
-                                                                    {
-                                                                        "dao_use_weight": true
-                                                                    }
-                                                                  )
-                                                                  (with-capability (CAN_UPDATE dao_id)
-                                                                    (add-dao-update dao_id dao_id (format "Proposal {} Passed" [proposal_count]) "The Hive's consensus method has been switched to Weight Mode")
-                                                                  )
-                                                                  (update dao-proposals-table proposal_id
-                                                                    {
-                                                                        "proposal_completed": true,
-                                                                        "proposal_completed_time": (at 'block-time (chain-data)),
-                                                                        "proposal_completed_action": t_action
-                                                                    }
-                                                                  )
-                                                              )
-                                                            )
-                                                          ))
                       ((= t_action "SET_WEIGHT") (let*
                                                             (
                                                               (SET_WEIGHT true)
@@ -2059,26 +2172,38 @@
         )
     )
 
-
-    ;;///////////////////////
-    ;;GETTERS
-    ;;//////////////////////
-
-    ;Get all dao ids
     (defun get-daos ()
       (keys daos-table)
     )
 
-    ;Get a daos info
     (defun get-dao-info (dao-id:string)
       (read daos-table dao-id)
     )
 
-    ;;Get dao msg
+    (defun get-dao-thresholds (dao-id:string)
+      (map (get-dao-threshold dao-id) COMMANDS)
+    )
+
+    (defun get-dao-threshold (dao-id:string command:string)
+      (read dao-thresholds-table (get-user-key dao-id command))
+    )
+
+    (defun get-dao-roles (dao-id:string)
+      (let*
+          (
+              (dao-roles (at "dao_roles" (read daos-table dao-id)))
+          )
+          (map (get-dao-role dao-id) dao-roles)
+      )
+    )
+
+    (defun get-dao-role (dao-id:string role:string)
+      (read dao-role-table (get-user-key dao-id role))
+    )
+
     (defun get-dao-message (dao-id:string count:integer)
       (read dao-messages-table (get-2-key count dao-id))
     )
-    ;;Get dao msgs
     (defun get-dao-messages (dao-id:string)
       (let*
           (
@@ -2089,12 +2214,9 @@
       )
     )
 
-
-    ;;Get dao update
     (defun get-dao-update (dao-id:string count:integer)
       (read dao-updates-table (get-2-key count dao-id))
     )
-    ;;Get dao updates
     (defun get-dao-updates (dao-id:string)
       (let*
           (
@@ -2105,12 +2227,9 @@
       )
     )
 
-
-    ;;Get dao pool
     (defun get-dao-pool (dao-id:string count:integer)
       (read dao-pools-table (get-2-key count dao-id))
     )
-    ;;Get dao pools
     (defun get-dao-pools (dao-id:string)
       (let*
           (
@@ -2121,8 +2240,6 @@
       )
     )
 
-
-    ;;Get dao proposal
     (defun get-dao-proposition (dao-id:string count:integer)
       (let
           (
@@ -2135,7 +2252,6 @@
           }
        )
     )
-    ;;Get dao proposals
     (defun get-dao-propositions (dao-id:string)
       (let*
           (
@@ -2146,12 +2262,9 @@
       )
     )
 
-
-    ;;Get dao vote option
     (defun get-proposal-vote-option (proposal-id:string count:integer)
       (read dao-votes-table (get-2-key count proposal-id))
     )
-    ;;Get dao vote options
     (defun get-proposal-vote-options (proposal-id:string)
       (let*
           (
@@ -2162,13 +2275,9 @@
       )
     )
 
-
-
-    ;;Get dao member
     (defun get-dao-member (dao_id:string count:integer)
       (read dao-accounts-count-table (get-2-key count dao_id))
     )
-    ;;Get all dao members by count
     (defun get-all-dao-members (dao-id:string)
       (let*
           (
@@ -2179,20 +2288,16 @@
       )
     )
 
-
-    ;;Get user votes for a proposition
     (defun get-user-proposal-vote (account-id:string proposal-id:string)
       (read user-vote-records (get-user-key account-id proposal-id))
     )
 
-    ;Get dao members via select
     (defun get-dao-members ( dao-id:string )
       (select dao-accounts-table
           (and? (where 'account_dao_id (= dao-id))
             (where 'account_banned (= false))))
     )
 
-    ;Gets a users daos
     (defun get-member-daos ( account:string )
         (let
           (
@@ -2202,7 +2307,6 @@
       )
     )
 
-    ;Gets all daos
     (defun get-all-daos ()
         (let
           (
@@ -2212,7 +2316,6 @@
       )
     )
 
-    ;Checks if a user is a member of a dao
     (defun is-member(dao-id:string account:string)
         (let*
             (
@@ -2223,7 +2326,6 @@
         )
     )
 
-    ;Checks if a user can propose in a dao
     (defun can-propose(dao-id:string account:string)
         (let*
             (
@@ -2233,11 +2335,6 @@
             can-propose
         )
     )
-
-
-    ;;///////////////////////
-    ;;UTILITIES
-    ;;//////////////////////
 
     (defun create-account-key:string
       ( pool_id:string account_id:string)
@@ -2314,14 +2411,16 @@
 
 )
 
-(create-table free.dao-hive-factory14.daos-table)
-(create-table free.dao-hive-factory14.dao-membership-ids-table)
-(create-table free.dao-hive-factory14.dao-messages-table)
-(create-table free.dao-hive-factory14.dao-updates-table)
-(create-table free.dao-hive-factory14.dao-accounts-table)
-(create-table free.dao-hive-factory14.dao-pools-table)
-(create-table free.dao-hive-factory14.dao-proposals-table)
-(create-table free.dao-hive-factory14.dao-votes-table)
-(create-table free.dao-hive-factory14.user-vote-records)
-(create-table free.dao-hive-factory14.user-proposition-records)
-(create-table free.dao-hive-factory14.dao-accounts-count-table)
+; (create-table free.dao-hive-factory16.daos-table)
+; (create-table free.dao-hive-factory16.dao-membership-ids-table)
+; (create-table free.dao-hive-factory16.dao-messages-table)
+; (create-table free.dao-hive-factory16.dao-updates-table)
+; (create-table free.dao-hive-factory16.dao-accounts-table)
+; (create-table free.dao-hive-factory16.dao-pools-table)
+; (create-table free.dao-hive-factory16.dao-proposals-table)
+; (create-table free.dao-hive-factory16.dao-votes-table)
+; (create-table free.dao-hive-factory16.user-vote-records)
+; (create-table free.dao-hive-factory16.user-proposition-records)
+; (create-table free.dao-hive-factory16.dao-accounts-count-table)
+; (create-table free.dao-hive-factory16.dao-thresholds-table)
+; (create-table free.dao-hive-factory16.dao-role-table)
