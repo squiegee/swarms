@@ -20,9 +20,9 @@
 (env-gaslog)
 (commit-tx)
 
-;;///////////////////////////////////
-;Create test keys + Load STAKE token
-;///////////////////////////////////
+;;///////////////////////////////////////////////////////////////////
+;Create test keys + Load STAKE token for testing DAO token transfers
+;////////////////////////////////////////////////////////////////////
 
 (begin-tx)
 (env-data { 'ns: 'test })
@@ -181,7 +181,7 @@
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;ANEDAK
+;ANEDAK- For testing DAO token swaps/transfers/good luck/ect
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (begin-tx)
 ;(define-namespace 'test (sig-keyset) (sig-keyset))
@@ -221,13 +221,6 @@
 (test.anedak.transfer-create "k:emily" "k:doug" (read-keyset "k:doug") 100.0)
 (commit-tx)
 
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;////////////////////////////
-;;kadena-stake TESTS
-;;;;;;;;;;;;;;;;;;;;;;;;;;//////////////////////////
-
-
 ;Load Contract + Create Tables
 (begin-tx)
 ;(define-namespace 'test (sig-keyset) (sig-keyset))
@@ -250,10 +243,77 @@
 (create-table test.dao-hive-factory.dao-accounts-count-table)
 (create-table test.dao-hive-factory.dao-thresholds-table)
 (create-table test.dao-hive-factory.dao-role-table)
+(create-table test.dao-hive-factory.dao-charters-table)
+(create-table test.dao-hive-factory.dao-links-table)
+(create-table test.dao-hive-factory.dao-actions-table)
 (commit-tx)
 
 
+;///////////////////////////////////////////
+;GAS TEST
+;for making big daos and testing gas limits upon dao creation
+;we can add ~100 people during creation in most cases
+;gas goes up as people create more and more complex roles in custom daos
 
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-05-19T00:00:00Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.create-dao
+  "test dao2"
+  "k:stuart"
+  "https:link"
+  "test daos long description"
+  86400.0
+  0.50
+  0.50
+  [{"id":"k:stuart", "can_propose":true, "role":"0"}{"id":"k:stuart2", "can_propose":true, "role":"0"}{"id":"k:stuart22", "can_propose":true, "role":"0"}{"id":"k:stuart222", "can_propose":true, "role":"0"}]
+  false
+  false
+  false
+  true
+  [{"action":"ADD_MEMBER", "threshold":0.50, "count": 2},
+  {"action":"REMOVE_MEMBER", "threshold":0.50, "count": 2},
+  {"action":"WITHDRAW", "threshold":0.80, "count": 1},
+  {"action":"ADJUST_THRESHOLD", "threshold":0.50, "count": 2},
+  {"action":"SWAP", "threshold":0.50, "count": 1},
+  {"action":"ADD_LIQUIDITY", "threshold":0.50, "count": 2},
+  {"action":"REMOVE_LIQUIDITY", "threshold":0.50, "count": 2},
+  {"action":"ADJUST_DAILY_LIMIT", "threshold":0.80, "count": 2},
+  {"action":"ADJUST_VOTER_THRESHOLD", "threshold":0.50, "count": 2},
+  {"action":"ADJUST_MIN_VOTETIME", "threshold":0.50, "count": 2},
+  {"action":"ENABLE_PROPOSAL_CONTROL", "threshold":0.50, "count": 2},
+  {"action":"ENABLE_WEIGHT", "threshold":0.50, "count": 2},
+  {"action":"AGAINST", "threshold":0.50, "count": 2},
+  {"action":"SET_WEIGHT", "threshold":0.50, "count": 2},
+  {"action":"ADJUST_MEMBER_ROLE", "threshold":0.50, "count": 2},
+  {"action":"EDIT_CHARTER", "threshold":0.50, "count": 2},
+  {"action":"HIRE", "threshold":0.70, "count": 2}]
+  [{"role_name":"0",
+  "role_cant_vote":["WITHDRAW","SWAP"],
+  "role_cant_propose":[""]}]
+  []
+  )
+(env-gaslog)
+(commit-tx)
+;correct our dao is created
+
+;//////////////////////////////////
+;//Crosschain Test / Gas test for comparing to test above
+(begin-tx)
+(env-chain-data { "chain-id": "0", "block-time" : (time "2022-05-19T00:00:01Z") })
+(env-hash (hash "emily-pact-id"))
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.copy-dao-crosschain "k:stuart" "By46oMV0BfenH0t5svG9Z7rZLUojpLMedS_07H3eeFc" "8")
+(env-events true)
+(env-chain-data { "chain-id" : "8" })
+(continue-pact 1)
+(env-gaslog)
+(commit-tx)
+;Correct - the dao is yanked to another chain
+
+(begin-tx)
+(test.dao-hive-factory.get-dao-info "By46oMV0BfenH0t5svG9Z7rZLUojpLMedS_07H3eeFc")
+(commit-tx)
 
 
 ;/////////////////////////////////////////////////////////////////////////////////
@@ -265,6 +325,7 @@
 (begin-tx)
 (env-chain-data { "block-time" : (time "2022-04-20T00:00:00Z") })
 (env-gas 0) (env-gaslog)
+(expect "Created DAO Swarm: -VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "Created DAO Swarm: -VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI"
 (test.dao-hive-factory.create-dao
   "test dao"
   "k:stuart"
@@ -278,28 +339,31 @@
   true
   false
   false
-  [{"action":"ADD_MEMBER", "threshold":0.50},
-  {"action":"REMOVE_MEMBER", "threshold":0.50},
-  {"action":"WITHDRAW", "threshold":0.50},
-  {"action":"ADJUST_THRESHOLD", "threshold":0.50},
-  {"action":"SWAP", "threshold":0.50},
-  {"action":"ADD_LIQUIDITY", "threshold":0.50},
-  {"action":"REMOVE_LIQUIDITY", "threshold":0.50},
-  {"action":"ADJUST_DAILY_LIMIT", "threshold":0.80},
-  {"action":"ADJUST_VOTER_THRESHOLD", "threshold":0.50},
-  {"action":"ADJUST_MIN_VOTETIME", "threshold":0.50},
-  {"action":"ENABLE_PROPOSAL_CONTROL", "threshold":0.50},
-  {"action":"ENABLE_WEIGHT", "threshold":0.50},
-  {"action":"AGAINST", "threshold":0.50},
-  {"action":"SET_WEIGHT", "threshold":0.50},
-  {"action":"ADJUST_MEMBER_ROLE", "threshold":0.50}]
+  [{"action":"ADD_MEMBER", "threshold":0.50, "count": 1},
+  {"action":"REMOVE_MEMBER", "threshold":0.50, "count": 1},
+  {"action":"WITHDRAW", "threshold":0.50, "count": 0},
+  {"action":"ADJUST_THRESHOLD", "threshold":0.50, "count": 1},
+  {"action":"SWAP", "threshold":0.50, "count": 1},
+  {"action":"ADD_LIQUIDITY", "threshold":0.50, "count": 1},
+  {"action":"REMOVE_LIQUIDITY", "threshold":0.50, "count": 1},
+  {"action":"ADJUST_DAILY_LIMIT", "threshold":0.80, "count": 1},
+  {"action":"ADJUST_VOTER_THRESHOLD", "threshold":0.50, "count": 1},
+  {"action":"ADJUST_MIN_VOTETIME", "threshold":0.50, "count": 1},
+  {"action":"ENABLE_PROPOSAL_CONTROL", "threshold":0.50, "count": 1},
+  {"action":"ENABLE_WEIGHT", "threshold":0.50, "count": 1},
+  {"action":"AGAINST", "threshold":0.50, "count": 1},
+  {"action":"SET_WEIGHT", "threshold":0.50, "count": 1},
+  {"action":"ADJUST_MEMBER_ROLE", "threshold":0.50, "count": 1},
+  {"action":"EDIT_CHARTER", "threshold":0.50, "count": 1}]
   [{"role_name":"MASTER",
   "role_cant_vote":[""],
   "role_cant_propose":[""]},
   {"role_name":"SLAVE",
   "role_cant_vote":["WITHDRAW"],
   "role_cant_propose":["WITHDRAW"]}]
+  []
   )
+)
 (env-gaslog)
 (commit-tx)
 ;correct our dao is created
@@ -328,6 +392,7 @@
 (begin-tx)
 (env-chain-data { "block-time" : (time "2022-04-20T00:00:01Z") })
 (test.dao-hive-factory.get-dao-thresholds "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.get-dao-roles "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
 (commit-tx)
 
 ;Test create-dao-member
@@ -340,14 +405,11 @@
 (commit-tx)
 ;Correct
 
-
 ;Test add-account - expect failure
 ;(begin-tx)
 ;(test.dao-hive-factory.add-account "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "k:kitty")
 ;(commit-tx)
 ;correct - fails due to capability not added this function must be accessed from somewhere else
-
-
 
 ;Test create-dao-message
 (begin-tx)
@@ -427,7 +489,6 @@
 (begin-tx)
 (env-chain-data { "block-time" : (time "2022-04-20T00:00:10Z") })
 (env-gas 0) (env-gaslog)
-;(test.anedak.create-account "k:stuart" (at "guard" (coin.details "k:stuart")))
 (test.dao-hive-factory.create-dao-proposal "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1000.0 "first proposal" "first proposal description" [{"action":"WITHDRAW", "action_strings":["1:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI", "k:stuart"], "action_decimals":[2.0], "action_integers":[]}])
 (env-gaslog)
 (commit-tx)
@@ -535,10 +596,12 @@
 (begin-tx)
 (env-chain-data { "block-time" : (time "2022-04-20T00:00:13Z") })
 (env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-thresholds "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
 (test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
 (test.dao-hive-factory.create-proposal-vote "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "4:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1)
 (test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
 (test.dao-hive-factory.get-dao-members "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.get-dao-thresholds "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
 (env-gaslog)
 (commit-tx)
 ;Correct - The vote passed, and emily was added to the hive
@@ -949,8 +1012,8 @@
 (env-chain-data { "block-time" : (time "2022-04-20T00:00:43Z") })
 (env-gas 0) (env-gaslog)
 (expect-failure
-  "You do not have permission to make proposals in this Hive"
-  "You do not have permission to make proposals in this Hive"
+  "You do not have permission to make proposals in this Swarm"
+  "You do not have permission to make proposals in this Swarm"
   (test.dao-hive-factory.create-dao-proposal "k:emily" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1000.0 "enable proposal control" "enable proposal control description" [{"action":"ENABLE_PROPOSAL_CONTROL", "action_strings":[], "action_decimals":[], "action_integers":[]}]))
 (env-gaslog)
 (test.dao-hive-factory.get-dao-propositions "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
@@ -1034,11 +1097,46 @@
 (commit-tx)
 ;Correct - The vote passed, and the proposal daily limit was adjusted to 2000
 
+;Test "EDIT_CHARTER" action
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:51Z") })
+(test.dao-hive-factory.create-dao-proposal "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1000.0 "adjust charter proposal" "adjust charter description" [{"action":"EDIT_CHARTER", "action_strings":["yo new charter whats up"], "action_decimals":[], "action_integers":[2000]}])
+(test.dao-hive-factory.get-dao-propositions "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(commit-tx)
+;Correct
 
+;Test create-proposal-vote
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:52Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.create-proposal-vote "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "17:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gaslog)
+(commit-tx)
+;Correct - The vote didnt pass yet because we need more voters
 
+;Test create-proposal-vote
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:53Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.create-proposal-vote "k:emily" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "17:-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" 1)
+(test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(test.dao-hive-factory.get-dao-charter "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(env-gaslog)
+(commit-tx)
+;Correct - The vote passed, the charter was updated
+
+;Test edit-dao-info
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-04-20T00:00:54Z") })
+(test.dao-hive-factory.edit-dao-links "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" [{"title":"yo","link":"httpslink"}])
+(test.dao-hive-factory.get-dao-links "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
+(commit-tx)
 
 ;/////////////////////////////////////////////
-;//LOCK DAO - The test dao is locked at this point
+;//LOCK DAO + CROSSCHAIN YANKING
 ;/////////////////////////////////////////////
 
 ;Test lock-dao
@@ -1053,8 +1151,8 @@
 (begin-tx)
 (env-chain-data { "block-time" : (time "2022-04-21T00:00:46Z") })
 (expect-failure
-  "Cannot add members to a locked Hive"
-  "Cannot add members to a locked Hive"
+  "Cannot add members to a locked Swarm"
+  "Cannot add members to a locked Swarm"
   (test.dao-hive-factory.create-dao-member "k:stuart" "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI" "k:kitty" "MASTER"))
 (commit-tx)
 ;Correct - cannot add accounts to a locked pool
@@ -1067,6 +1165,7 @@
 (env-chain-data { "chain-id" : "8" })
 (continue-pact 1)
 (commit-tx)
+;Correct - the dao is yanked to another chain
 
 (begin-tx)
 (test.dao-hive-factory.get-dao-info "-VzVv0OG0sp-WGFGM9x6qdw9Rb2bawGgHC7Jn-m9IsI")
@@ -1076,7 +1175,7 @@
 
 ;/////////////////////////////////////////////////////////////////////////////////
 ;// CUSTOM DAO TESTs
-;// Test creating a CUSTOM dao with custom thresholds and roles
+;// Test creating a CUSTOM dao with custom thresholds and roles and actions
 ;;////////////////////////////////////////////////////////////////////////////////
 
 
@@ -1097,27 +1196,30 @@
   false
   false
   true
-  [{"action":"ADD_MEMBER", "threshold":0.50},
-  {"action":"REMOVE_MEMBER", "threshold":0.50},
-  {"action":"WITHDRAW", "threshold":0.80},
-  {"action":"ADJUST_THRESHOLD", "threshold":0.50},
-  {"action":"SWAP", "threshold":0.50},
-  {"action":"ADD_LIQUIDITY", "threshold":0.50},
-  {"action":"REMOVE_LIQUIDITY", "threshold":0.50},
-  {"action":"ADJUST_DAILY_LIMIT", "threshold":0.80},
-  {"action":"ADJUST_VOTER_THRESHOLD", "threshold":0.50},
-  {"action":"ADJUST_MIN_VOTETIME", "threshold":0.50},
-  {"action":"ENABLE_PROPOSAL_CONTROL", "threshold":0.50},
-  {"action":"ENABLE_WEIGHT", "threshold":0.50},
-  {"action":"AGAINST", "threshold":0.50},
-  {"action":"SET_WEIGHT", "threshold":0.50},
-  {"action":"ADJUST_MEMBER_ROLE", "threshold":0.50}]
+  [{"action":"ADD_MEMBER", "threshold":0.50, "count": 2},
+  {"action":"REMOVE_MEMBER", "threshold":0.50, "count": 2},
+  {"action":"WITHDRAW", "threshold":0.80, "count": 2},
+  {"action":"ADJUST_THRESHOLD", "threshold":0.50, "count": 2},
+  {"action":"SWAP", "threshold":0.50, "count": 2},
+  {"action":"ADD_LIQUIDITY", "threshold":0.50, "count": 2},
+  {"action":"REMOVE_LIQUIDITY", "threshold":0.50, "count": 2},
+  {"action":"ADJUST_DAILY_LIMIT", "threshold":0.80, "count": 2},
+  {"action":"ADJUST_VOTER_THRESHOLD", "threshold":0.50, "count": 2},
+  {"action":"ADJUST_MIN_VOTETIME", "threshold":0.50, "count": 2},
+  {"action":"ENABLE_PROPOSAL_CONTROL", "threshold":0.50, "count": 2},
+  {"action":"ENABLE_WEIGHT", "threshold":0.50, "count": 2},
+  {"action":"AGAINST", "threshold":0.50, "count": 2},
+  {"action":"SET_WEIGHT", "threshold":0.50, "count": 2},
+  {"action":"ADJUST_MEMBER_ROLE", "threshold":0.50, "count": 1},
+  {"action":"EDIT_CHARTER", "threshold":0.50, "count": 2},
+  {"action":"HIRE", "threshold":0.70, "count": 2}]
   [{"role_name":"MASTER",
   "role_cant_vote":[""],
   "role_cant_propose":[""]},
   {"role_name":"SLAVE",
   "role_cant_vote":["ADJUST_MEMBER_ROLE"],
   "role_cant_propose":["ADJUST_MEMBER_ROLE"]}]
+  ["HIRE"]
   )
 (env-gaslog)
 (commit-tx)
@@ -1263,11 +1365,11 @@
 (commit-tx)
 ;Correct - The vote withdraw passes after 2 people vote
 
-;Test "ADJUST_MEMBER_ROLE"" action
+;Test "HIRE" custom DAO action
 (begin-tx)
 (env-chain-data { "block-time" : (time "2022-05-20T00:00:13Z") })
 (env-gas 0) (env-gaslog)
-(test.dao-hive-factory.create-dao-proposal "k:stuart" "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM" 1000.0 "second proposal" "second proposal description" [{"action":"POLL", "action_strings":["k:kitty", "MASTER"], "action_decimals":[], "action_integers":[]}])
+(test.dao-hive-factory.create-dao-proposal "k:stuart" "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM" 1000.0 "second proposal" "second proposal description" [{"action":"HIRE", "action_strings":["HIRE"], "action_decimals":[], "action_integers":[]}])
 (env-gaslog)
 (commit-tx)
 ;Correct
@@ -1283,6 +1385,45 @@
 (test.dao-hive-factory.get-dao-propositions "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM")
 (test.dao-hive-factory.get-dao-thresholds "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM")
 (test.dao-hive-factory.get-all-dao-members "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM")
+(test.dao-hive-factory.get-dao-updates "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM")
 (env-gaslog)
 (commit-tx)
-;Correct 
+
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-05-20T00:00:15Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-all-dao-members "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM")
+(test.dao-hive-factory.get-dao-thresholds "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM")
+(test.dao-hive-factory.get-dao-roles "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM")
+(test.dao-hive-factory.create-proposal-vote "k:kitty" "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM" "2:GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM" 1)
+(test.dao-hive-factory.get-dao-propositions "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM")
+(test.dao-hive-factory.get-dao-thresholds "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM")
+(test.dao-hive-factory.get-all-dao-members "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM")
+(test.dao-hive-factory.get-dao-updates "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM")
+(env-gaslog)
+(commit-tx)
+;Correct - The vote passes after 2 votes and the "HIRE" action is executed
+
+
+;Test "ADJUST_THRESHOLD" for "HIRE" custom DAO action
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-05-20T00:00:16Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.create-dao-proposal "k:stuart" "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM" 1000.0 "third proposal" "third proposal description" [{"action":"ADJUST_THRESHOLD", "action_strings":["HIRE"], "action_decimals":[0.10], "action_integers":[]}])
+(env-gaslog)
+(commit-tx)
+;Correct
+
+
+;Test create-proposal-vote
+(begin-tx)
+(env-chain-data { "block-time" : (time "2022-05-20T00:00:17Z") })
+(env-gas 0) (env-gaslog)
+(test.dao-hive-factory.get-dao-thresholds "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM")
+(test.dao-hive-factory.create-proposal-vote "k:stuart" "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM" "3:GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM" 1)
+(test.dao-hive-factory.get-dao-propositions "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM")
+(test.dao-hive-factory.get-dao-thresholds "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM")
+(test.dao-hive-factory.get-dao-actions "GtSgaRmsXqBltva7ql6cq3PJDjCdcePuhQJt-xi4QMM")
+(env-gaslog)
+(commit-tx)
+;Correct - The vote passes after 1 vote and the "HIRE" threshold is adjusted
